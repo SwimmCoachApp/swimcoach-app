@@ -43,7 +43,7 @@ Pourquoi : suivre son propre groupe sans voir (ni abîmer) les données des coll
 - **Offre gratuite Supabase** : pas de sauvegardes, pause après une semaine d'inactivité. Acceptable en test, à passer en offre payante avant de recevoir de vraies données de mineurs.
 - **GitHub Pages** n'est gratuit que pour les dépôts publics. Le dépôt est privé aujourd'hui : décision en section 11.
 - Échelle : une dizaine d'entraîneurs, quelques centaines de nageurs. Pas de contrainte de performance particulière.
-- **Projets Supabase interdits** pour toute migration, test ou requête : l'ancien projet SwimCoach (`aijgczmszymfjkeegbjz`) et le projet « École de natation TOAC » (`vijexmmydvgfpkyzkgls`, une autre app de Damien). Ces deux références figurent sur la liste noire de la CI. Le travail de la phase de construction se fait uniquement sur le **nouveau** projet de Damien.
+- **Projets Supabase interdits** pour toute migration, test ou requête : l'ancien projet SwimCoach (`aijgczmszymfjkeegbjz`) et le projet « École de natation TOAC » (`vijexmmydvgfpkyzkgls`, une autre app de Damien). Ces deux références figurent sur la liste noire de la CI. Le travail de la phase de construction se fait uniquement sur le **nouveau** projet de Damien, `zuguceilohochmpnbzaz`.
 - **Environnement de développement** (choix du rédacteur) : un seul projet Supabase hébergé pendant la construction, avec des comptes de test créés et supprimés par les scripts ; aucune vraie donnée avant l'offre payante et le SMTP. Les tests d'isolation tournent aussi en CI sur une pile Supabase locale (`supabase start`, Docker disponible sur les machines GitHub). Les migrations sont des fichiers du dépôt, donc le projet peut être recréé à l'identique.
 
 ## 4. Approches considérées
@@ -186,7 +186,7 @@ En cas de doute sur un comportement, **le code de `club4` fait foi**.
 
 À régler avant la première mise en ligne (pas avant d'écrire le code) :
 - **Dépôt public ou privé** : public (Pages gratuit, aucun secret dans le code) ou privé avec un autre hébergeur (Cloudflare Pages, Netlify).
-- **Projet Supabase** : région UE, organisation, offre. La session ne voit aujourd'hui que le projet « École de natation TOAC » (à ne jamais toucher). Le nouveau projet doit être **accessible depuis la session** pour que le constructeur puisse y appliquer les migrations et lancer les contrôles de sécurité.
+- **Projet Supabase** : créé par Damien, `zuguceilohochmpnbzaz` (« SwimmCoachApp's Project », région UE `eu-west-1`, organisation distincte de celle du club). La session le voit et peut y appliquer les migrations et lancer les contrôles de sécurité. Reste à décider : l'offre (gratuite pendant la construction, payante avant de vraies données) et le SMTP.
 - **SMTP** : service d'envoi (Brevo, Resend…) et adresse d'expéditeur, idéalement au nom du club.
 - **Code d'inscription** initial.
 - **Éditeur et identifiant d'application** pour les stores, avant publication seulement.
