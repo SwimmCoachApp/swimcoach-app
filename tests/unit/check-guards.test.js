@@ -19,11 +19,12 @@ test('refuse une clé service_role et un onclick en ligne', () => {
 test('accepte core/storage.js, seul fichier autorisé à appeler localStorage', () => {
   expect(checkGuards([{ path: 'src/core/storage.js', text: "localStorage.getItem(k)" }])).toEqual([]);
 });
-test('mode dist : seulement forbidden-project et sb_secret_', () => {
+test('mode dist : seulement forbidden-project et une vraie clé sb_secret_', () => {
   const bundle = [{ path: 'dist/assets/index.js', text:
-    "localStorage.getItem('x');var k='service_role';\n<b onclick=\"x()\">\nvar s='sb_secret_abc'\nvar p='vijexmmydvgfpkyzkgls'" }];
+    "localStorage.getItem('x');var k='service_role';\n<b onclick=\"x()\">\nvar s='sb_secret_" + 'a'.repeat(32) + "'\nvar p='vijexmmydvgfpkyzkgls'" }];
   const v = checkGuards(bundle, { mode: 'dist' });
   expect(v.map(x => [x.rule, x.line])).toEqual([['secret-key', 3], ['forbidden-project', 4]]);
+  expect(checkGuards([{ path: 'dist/a.js', text: 'if(k.startsWith("sb_secret_"))throw 1' }], { mode: 'dist' })).toEqual([]);
   expect(checkGuards([{ path: 'dist/a.js', text: "localStorage.clear();service_role;onclick=" }], { mode: 'dist' })).toEqual([]);
 });
 

@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 const FORBIDDEN_PROJECT = /aijgczmszymfjkeegbjz|vijexmmydvgfpkyzkgls/;
 const SECRET_SRC = /service_role|sb_secret_/;
-const SECRET_DIST = /sb_secret_/;
+// En dist, supabase-js contient le préfixe nu (contrôle de format) : on ne cherche
+// qu'une vraie clé, toujours suivie d'un long suffixe.
+const SECRET_DIST = /sb_secret_[A-Za-z0-9_-]{20,}/;
 const EVENTS = [
   'click', 'dblclick', 'auxclick', 'contextmenu', 'input', 'change', 'submit', 'reset', 'invalid', 'select',
   'keydown', 'keyup', 'keypress', 'load', 'error', 'abort', 'unload', 'beforeunload', 'resize', 'scroll',
