@@ -21,3 +21,18 @@ test('sanitizeRich ne garde que les balises permises, sans attribut', () => {
   expect(sanitizeRich('<a href="javascript:x">lien</a><ul><li>1</li></ul>')).toBe('lien<ul><li>1</li></ul>');
   expect(sanitizeRich('')).toBe('');
 });
+
+test('sanitizeRich supprime le contenu des éléments SVG et MathML dangereux, les commentaires et les champs', () => {
+  expect(sanitizeRich('a<svg><style>x{}</style><script>alert(1)</script></svg>b')).toBe('ab');
+  expect(sanitizeRich('a<math><style>x</style></math>b')).toBe('ab');
+  expect(sanitizeRich('a<!-- <script>x</script> -->b')).toBe('ab');
+  expect(sanitizeRich('<div><p><input value="x"><b>ok</b></p></div>')).toBe('<div><p><b>ok</b></p></div>');
+});
+
+test('html : un guillemet dans une valeur ne sort pas d’un attribut', () => {
+  const out = html`<input value="${'" onfocus="alert(1)'}">`;
+  expect(out).toBe('<input value="&quot; onfocus=&quot;alert(1)">');
+  const el = document.createElement('div');
+  el.innerHTML = out;
+  expect(el.firstChild.attributes).toHaveLength(1);
+});

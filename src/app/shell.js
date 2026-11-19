@@ -3,6 +3,7 @@
  * du bas et feuilles modales (design Club).
  */
 import { html, raw } from '../core/html.js';
+import { suspendTeam } from '../core/sync.js';
 import { listMyTeams, setCurrentTeam } from '../core/teams.js';
 import { leaveSession } from '../features/auth/index.js';
 import { on } from './actions.js';
@@ -47,7 +48,15 @@ export function closeModal(id) {
   requestAnimationFrame(() => requestAnimationFrame(() => void el.offsetHeight));
 }
 
-/** Affiche un écran enregistré. @param {string} name */
+/**
+ * Affiche un écran enregistré.
+ *
+ * RÈGLE pour les écrans de données : ils ne s'affichent qu'à partir du store (core/store.js) et
+ * seulement une fois l'ouverture de l'espace terminée (openTeam a chargé le cache de cet espace).
+ * Pendant un changement d'espace, la coque n'affiche que « Chargement de l'espace… » : le store de
+ * l'ancien espace est déjà vidé (suspendTeam) et aucun écran n'est rendu avant startApp.
+ * @param {string} name
+ */
 export function showScreen(name) {
   const def = screens.get(name);
   if (!ctx || !def) return;
@@ -131,6 +140,11 @@ on('open-teams', async () => {
 on('switch-team', (el) => {
   closeModal('modal-teams');
   if (!ctx || el.dataset.id === ctx.team.id) return;
+  const name = el.querySelector('span')?.textContent ?? '';
+  suspendTeam(); // coupe le temps réel et vide le store de l'ancien espace tout de suite
   setCurrentTeam(el.dataset.id);
-  ctx.leave(); // reprend le routage : ouvre l'espace choisi
+  const shell = ctx.root.querySelector('.shell');
+  shell.querySelector('[data-team-name]').textContent = name;
+  shell.querySelector('#views').innerHTML = '<div class="screen" data-loading role="status"><p>Chargement de l\'espace…</p></div>';
+  ctx.leave(); // reprend le routage : charge l'espace choisi puis redessine la coque
 });

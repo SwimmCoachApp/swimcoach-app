@@ -20,9 +20,9 @@ vi.mock('../../src/core/teams.js', () => ({
   setCurrentTeam: vi.fn(),
 }));
 
-const { fetchAll, mergeTable, checkMembership, initialSync, startLive, stopLive, openTeam, closeTeam, configureSync, LIVE_DELAY_MS } =
+const { fetchAll, mergeTable, checkMembership, initialSync, startLive, stopLive, openTeam, closeTeam, configureSync, suspendTeam, LIVE_DELAY_MS } =
   await import('../../src/core/sync.js');
-const { db, loadCache, resetStore, upsertLocal, subscribe } = await import('../../src/core/store.js');
+const { db, getContext, loadCache, resetStore, upsertLocal, subscribe } = await import('../../src/core/store.js');
 const { enqueue, flush, pendingCount, rejectedCount } = await import('../../src/core/outbox.js');
 
 const toast = vi.fn();
@@ -305,13 +305,44 @@ test("openTeam : flush de l'ancien, désabonnement, nouveau cache, synchro et te
   fake.client.tables.groups = [{ id: 'g2', team_id: 'T2' }, { id: 'g3', team_id: 'T2' }];
   fake.client.calls.length = 0;
   const p = openTeam('A', { id: 'T2', name: 'Avenirs' });
-  expect(db.groups.has('g2')).toBe(false); // le cache de T2 est chargé après le flush de T1
+  expect(db.groups.has('g2')).toBe(true); // le cache de T2 est chargé tout de suite, sans attendre T1
   await p;
   expect(fake.client.calls[0]).toMatchObject({ op: 'upsert', table: 'swimmers' });
   expect(first.removed).toBe(true);
   expect(fake.client.channels.at(-1).handlers[0].filter.filter).toBe('team_id=eq.T2');
   expect([...db.groups.keys()].sort()).toEqual(['g2', 'g3']);
   expect(pendingCount()).toBe(0);
+});
+
+test("changement d'espace pendant un envoi lent : aucune ligne de l'ancien espace n'est lisible", async () => {
+  await openTeam('A', { id: 'T1', name: 'Benjamins' });
+  const first = fake.client.channels.at(-1);
+  upsertLocal('swimmers', { id: 'old', team_id: 'T1' });
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'old', row: { id: 'old', team_id: 'T1' } });
+  fake.client.holdWrites = () => true; // l'envoi de T1 reste bloqué
+  teamStore('A', 'T2').set('cache', { groups: [{ id: 'g2', team_id: 'T2' }] });
+  const p = openTeam('A', { id: 'T2', name: 'Avenirs' });
+  expect(db.swimmers.has('old')).toBe(false); // synchrone : rien de T1
+  expect(getContext()).toEqual({ coachId: 'A', teamId: 'T2' });
+  expect(db.groups.has('g2')).toBe(true);
+  expect(first.removed).toBe(true);
+  await vi.waitFor(() => expect(fake.client.held).toHaveLength(1)); // la file de T1 part en arrière-plan
+  await p; // ... et n'a pas bloqué l'ouverture
+  expect(db.swimmers.has('old')).toBe(false);
+  fake.client.holdWrites = null;
+  fake.client.held[0].release();
+});
+
+test("suspendTeam : store vidé et temps réel coupé tout de suite, file envoyée en arrière-plan", async () => {
+  await openTeam('A', { id: 'T1', name: 'Benjamins' });
+  const ch = fake.client.channels.at(-1);
+  upsertLocal('groups', { id: 'g1', team_id: 'T1' });
+  enqueue({ table: 'groups', kind: 'upsert', key: 'g1', row: { id: 'g1', team_id: 'T1' } });
+  suspendTeam();
+  expect(ch.removed).toBe(true);
+  expect(db.groups.size).toBe(0);
+  expect(getContext()).toBeNull();
+  await vi.waitFor(() => expect(pendingCount('T1')).toBe(0));
 });
 
 test("changement d'entraîneur : l'espace ouvert est fermé sans rien envoyer", async () => {

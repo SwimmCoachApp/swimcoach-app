@@ -9,10 +9,14 @@ function dispatch(ev) {
   const map = handlers[ev.type];
   for (let el = ev.target instanceof Element ? ev.target.closest('[data-action]') : null; el; el = el.parentElement?.closest('[data-action]')) {
     const wanted = el.dataset.on || 'click';
-    const fn = wanted === ev.type ? map.get(el.dataset.action) : null;
-    if (fn) {
-      fn(el, ev);
-      return;
+    if (wanted === ev.type) {
+      const fn = map.get(el.dataset.action);
+      if (fn) {
+        fn(el, ev);
+        return;
+      }
+    } else if (el.dataset.on) {
+      return; // un champ change/input ne laisse pas son clic remonter vers l'action d'un parent
     }
   }
 }

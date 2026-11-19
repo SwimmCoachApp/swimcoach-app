@@ -56,7 +56,7 @@ export function makeFakeClient(tables = {}) {
       upsert(row, options) { call.op = 'upsert'; call.row = row; call.options = options; return b; },
       delete() { call.op = 'delete'; return b; },
       then(resolve, reject) {
-        if (call.op === 'select' && client.hold?.(call)) {
+        if ((call.op === 'select' ? client.hold : client.holdWrites)?.(call)) {
           const result = run(call);
           return new Promise((r) => client.held.push({ call, release: () => r(result) })).then(resolve, reject);
         }

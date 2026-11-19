@@ -52,11 +52,11 @@ export function sanitizeRich(input) {
       if (node.nodeType === 3) {
         to.append(node.textContent);
       } else if (node.nodeType === 1) {
-        if (ALLOWED.has(node.tagName)) {
-          const el = document.createElement(node.tagName.toLowerCase());
+        if (ALLOWED.has(node.localName.toUpperCase())) {
+          const el = document.createElement(node.localName.toLowerCase());
           copy(node, el);
           to.append(el);
-        } else if (!/^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|IFRAME|OBJECT|EMBED)$/.test(node.tagName)) {
+        } else if (!/^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|IFRAME|OBJECT|EMBED)$/.test(node.localName.toUpperCase())) {
           copy(node, to);
         }
       }

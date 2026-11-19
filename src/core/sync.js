@@ -186,7 +186,11 @@ export async function initialSync() {
 }
 
 /**
- * Ouvre un espace : envoie la file de l'ancien, se désabonne, charge le cache, s'abonne, synchronise.
+ * Ouvre un espace : se désabonne de l'ancien, charge tout de suite le cache du nouveau, s'abonne, synchronise.
+ * La file de l'ancien espace part en arrière-plan (elle est enregistrée par espace : un échec ou une
+ * connexion lente ne bloque jamais l'ouverture et aucune ligne de l'ancien espace ne reste lisible).
+ * Le cache du nouvel espace est chargé de façon synchrone dans cet appel : les écrans ne doivent
+ * s'afficher qu'après lui, à partir du store seulement.
  * Sans effet si cet espace est déjà ouvert.
  * @param {string} coachId
  * @param {{id: string, name: string}} team
@@ -198,20 +202,30 @@ export async function openTeam(coachId, team) {
     current = { coachId, team };
     return;
   }
-  const mine = { coachId, team };
-  current = mine;
-  if (prev && prev.coachId === coachId) {
-    try {
-      await flush(supabase, prev.coachId, prev.teamId);
-    } catch {
-      // la file reste enregistrée pour un prochain envoi
-    }
-  }
-  if (current !== mine) return; // un autre espace a été demandé entre-temps
+  current = { coachId, team };
+  if (prev && prev.coachId === coachId) flushInBackground(prev);
   stopLive();
-  loadCache(coachId, team.id);
+  loadCache(coachId, team.id); // vide d'abord le store de l'ancien espace (et sauvegarde son cache)
   startLive();
   await initialSync();
+}
+
+function flushInBackground(ctx) {
+  flush(supabase, ctx.coachId, ctx.teamId).catch(() => {
+    // la file reste enregistrée pour un prochain envoi
+  });
+}
+
+/**
+ * Quitte l'espace ouvert tout de suite (changement d'espace en cours) : coupe le temps réel, vide le store
+ * (après avoir sauvegardé le cache de cet espace) et envoie sa file en arrière-plan.
+ */
+export function suspendTeam() {
+  const prev = getContext();
+  current = null;
+  stopLive();
+  resetStore();
+  if (prev) flushInBackground(prev);
 }
 
 /** Ferme l'espace ouvert sans rien envoyer (déconnexion, changement d'entraîneur, accès perdu). */

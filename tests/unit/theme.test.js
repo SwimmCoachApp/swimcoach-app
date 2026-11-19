@@ -22,3 +22,10 @@ test('une valeur inconnue est ignorée', () => {
   applyTheme('rose');
   expect(currentTheme()).toBe('light');
 });
+
+test('au premier chargement, le thème par défaut n’est pas écrit dans le stockage', () => {
+  initTheme();
+  expect(appStore.get('theme')).toBeNull();
+  applyTheme('dark'); // choix de l'utilisateur
+  expect(appStore.get('theme')).toBe('dark');
+});
