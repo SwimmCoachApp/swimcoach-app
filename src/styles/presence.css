@@ -17,3 +17,4 @@
 .p-name{flex:1;font-size:13px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .p-group{font-size:11px;color:var(--text3);}
 .presence-empty{padding:16px;text-align:center;color:var(--text3);font-size:12px;}
+.is-deleted .presence-list,.is-deleted .presence-meter{opacity:.5;}

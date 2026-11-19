@@ -16,17 +16,23 @@ let coach = null;
 let recovering = false;
 let started = null;
 let getPendingCount = () => 0;
+let flushPending = async () => {};
+
+/** Attente maximale de l'envoi de la file avant une déconnexion. */
+export const FLUSH_WAIT_MS = 3000;
 const coachListeners = new Set();
 const recoveryListeners = new Set();
 
 /**
  * Branche des dépendances de la session.
- * @param {{getPendingCount?: (coachId?: string) => number}} deps
+ * @param {{getPendingCount?: (coachId?: string) => number, flushPending?: (coachId: string) => Promise<void>}} deps
  *   getPendingCount : nombre d'écritures en attente d'envoi de l'entraîneur donné (par défaut le
- *   connecté), tous espaces confondus. Branchée sur la file d'attente par main.js.
+ *   connecté), tous espaces confondus. flushPending : envoie la file de cet entraîneur (tous espaces).
+ *   Branchées sur la file d'attente par main.js.
  */
 export function configureSession(deps = {}) {
   if (deps.getPendingCount) getPendingCount = deps.getPendingCount;
+  if (deps.flushPending) flushPending = deps.flushPending;
 }
 
 /** @returns {{id: string, email: string, activated: boolean}|null} */
@@ -173,13 +179,30 @@ export async function updatePassword(password) {
   recovering = false;
 }
 
+/** Tente d'envoyer la file de l'entraîneur (en ligne seulement), sans attendre plus de FLUSH_WAIT_MS. */
+async function tryFlush(coachId) {
+  if (!coachId || !navigator.onLine) return;
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(resolve, FLUSH_WAIT_MS); });
+  try {
+    await Promise.race([Promise.resolve().then(() => flushPending(coachId)).catch(() => {}), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Déconnecte l'entraîneur et efface ses données locales (jamais celles de l'ancienne app).
+ * S'il reste des écritures en attente et que le réseau est là, la file part d'abord (attente bornée
+ * à FLUSH_WAIT_MS) ; on recompte ensuite.
  * @param {{force?: boolean}} [opts] force : déconnecte même s'il reste des écritures en attente
- * @returns {Promise<'done'|'pending'>} 'pending' si des écritures attendent d'être envoyées et que force est faux
+ * @returns {Promise<'done'|'pending'>} 'pending' si des écritures attendent encore d'être envoyées et que force est faux
  */
 export async function signOut({ force = false } = {}) {
-  if (!force && getPendingCount(coach?.id) > 0) return 'pending';
+  if (!force && getPendingCount(coach?.id) > 0) {
+    await tryFlush(coach?.id);
+    if (getPendingCount(coach?.id) > 0) return 'pending';
+  }
   try {
     await supabase.auth.signOut({ scope: 'local' });
   } catch {

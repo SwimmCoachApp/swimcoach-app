@@ -15,7 +15,8 @@ import './styles/club.css';
 import './styles/auth.css';
 import { initSession, getCoach, onCoachChange, onPasswordRecovery, isRecovering, configureSession } from './core/session.js';
 import { listMyTeams, getCurrentTeam, setCurrentTeam } from './core/teams.js';
-import { pendingCount } from './core/outbox.js';
+import { pendingCount, flushCoach } from './core/outbox.js';
+import { supabase } from './core/supabase.js';
 import { ensureDefaultGroups } from './core/default-groups.js';
 import { configureSync, openTeam, closeTeam } from './core/sync.js';
 import { showCredentials, showCode, showRecovery, leaveSession } from './features/auth/index.js';
@@ -32,8 +33,8 @@ import { initUpdate } from './app/update.js';
 const root = document.querySelector('#app');
 let run = 0;
 
-// signOut renvoie 'pending' tant que la file d'attente de l'entraîneur n'est pas vide.
-configureSession({ getPendingCount: (coachId) => pendingCount(undefined, coachId) });
+// signOut envoie d'abord la file (en ligne, 3 s au plus) ; 'pending' s'il reste des écritures.
+configureSession({ getPendingCount: (coachId) => pendingCount(undefined, coachId), flushPending: (coachId) => flushCoach(supabase, coachId) });
 // Accès à l'espace ouvert perdu : on reprend le routage (autre espace ou « Crée ton espace »).
 configureSync({ toast, onTeamLost: () => route(), onSynced: ensureDefaultGroups });
 initTheme();

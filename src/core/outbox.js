@@ -207,6 +207,17 @@ async function run(client, coachId, teamId) {
 }
 
 /**
+ * Envoie les files de tous les espaces de l'entraîneur (avant une déconnexion).
+ * @param {object} client client Supabase
+ * @param {string} coachId
+ * @returns {Promise<void>}
+ */
+export async function flushCoach(client, coachId) {
+  if (!coachId) return;
+  await Promise.all(teamsOf(coachId).map((t) => flush(client, coachId, t)));
+}
+
+/**
  * Envoie dans l'ordre les écritures de l'entraîneur pour l'espace visé.
  * S'arrête à la première erreur temporaire ; une op refusée définitivement est mise de côté.
  * Un seul envoi à la fois par espace : un appel pendant un envoi attend celui-ci.

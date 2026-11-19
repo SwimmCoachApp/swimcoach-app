@@ -9,7 +9,7 @@ vi.mock('../../src/core/supabase.js', () => ({
 }));
 vi.mock('../../src/core/session.js', () => ({ getCoach: () => ({ id: 'A' }), onCoachChange: () => () => {} }));
 
-const { togglePresence, rollCallList, presenceGauge, isPresent, startDraft, commitDraft, discardDrafts, setAllPresence } = await import('../../src/features/presence/logic.js');
+const { togglePresence, rollCallList, presenceGauge, isPresent, startDraft, commitDraft, discardDrafts, setAllPresence, protectDraft, rollCallSession } = await import('../../src/features/presence/logic.js');
 const { saveSession } = await import('../../src/features/calendar/logic.js');
 const { db, loadCache, resetStore, upsertLocal } = await import('../../src/core/store.js');
 const { teamStore } = await import('../../src/core/storage.js');
@@ -128,4 +128,38 @@ test('relecture du serveur pendant l’appel : mes coches en attente restent, ce
   ]);
   expect([...db.presence.values()].map((p) => p.swimmer_id).sort()).toEqual(['A', 'C']);
   expect(presenceGauge(S1)).toEqual({ present: 2, total: 4 });
+});
+
+test('séance supprimée ailleurs pendant l’appel : aucune coche, aucun brouillon créé, la source de la liste est vide', () => {
+  db.sessions.delete(S1); // relecture : la séance a disparu du serveur
+  expect(rollCallSession(S1)).toBeNull();
+  expect(togglePresence(S1, 'A', true)).toBe(false);
+  expect(isPresent(S1, 'A')).toBe(false);
+  expect(ops()).toEqual([]);
+  expect(presenceGauge(S1)).toEqual({ present: 0, total: 0 });
+  // une séance encore là : la coche est appliquée
+  upsertLocal('sessions', { id: S1, date: '2026-11-20', type: 'nat', title: '' });
+  expect(togglePresence(S1, 'A', true)).toBe(true);
+});
+
+test('liste et jauge lisent la même séance : brouillon (date du brouillon) ou séance du store', () => {
+  const NEW = 'eeeeeeee-0000-4000-8000-000000000005';
+  startDraft(NEW, '2025-03-10'); // saison 2024 : aucun des nageurs de 2026
+  expect(rollCallSession(NEW)).toEqual({ id: NEW, date: '2025-03-10' });
+  expect(rollCallList(rollCallSession(NEW))).toEqual([]);
+  expect(presenceGauge(NEW)).toEqual({ present: 0, total: 0 });
+  expect(rollCallSession(S1)).toBe(db.sessions.get(S1));
+});
+
+test('brouillon en cours d’enregistrement : une autre feuille ouverte pendant l’envoi de la photo ne le perd pas', async () => {
+  const NEW = 'ffffffff-0000-4000-8000-000000000006';
+  startDraft(NEW, '2026-11-21');
+  togglePresence(NEW, 'A', true);
+  togglePresence(NEW, 'B', true);
+  protectDraft(NEW); // début de l'enregistrement
+  discardDrafts(); // une autre feuille s'ouvre pendant l'envoi
+  expect(isPresent(NEW, 'A')).toBe(true);
+  await saveSession({ id: NEW, date: '2026-11-21', type: 'nat' });
+  expect(commitDraft(NEW)).toBe(2);
+  expect(ops()).toEqual(['upsert sessions', 'upsert A', 'upsert B']);
 });

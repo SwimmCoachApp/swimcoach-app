@@ -6,19 +6,30 @@
  * sans être redessinée tant que les nageurs ne changent pas (les photos ne clignotent pas).
  */
 import { on } from '../../app/actions.js';
+import { toast } from '../../app/toast.js';
 import { db, subscribe } from '../../core/store.js';
 import { photoUrl } from '../../core/photos.js';
-import { onSessionFormOpen, onSessionSaved } from '../calendar/index.js';
+import { onSessionFormOpen, onSessionSaving, onSessionSaved } from '../calendar/index.js';
 import { groupName } from '../contacts/logic.js';
-import { rollCallList, presenceGauge, isPresent, togglePresence, setAllPresence, startDraft, commitDraft, discardDrafts } from './logic.js';
+import { rollCallList, rollCallSession, presenceGauge, isPresent, togglePresence, setAllPresence, startDraft, protectDraft, commitDraft, discardDrafts } from './logic.js';
 import { rollCallHtml, presenceListHtml } from './view.js';
 
-/** @type {{slot: HTMLElement|null, sessionId: string|null, date: string|null, roster: string, unsubs: Array<() => void>}} */
-const ui = { slot: null, sessionId: null, date: null, roster: '', unsubs: [] };
+const DELETED = 'Cette séance a été supprimée';
+
+/** @type {{slot: HTMLElement|null, sessionId: string|null, roster: string, deleted: boolean, unsubs: Array<() => void>}} */
+const ui = { slot: null, sessionId: null, roster: '', deleted: false, unsubs: [] };
 
 function stop() {
   for (const off of ui.unsubs) off();
-  Object.assign(ui, { slot: null, sessionId: null, date: null, roster: '', unsubs: [] });
+  Object.assign(ui, { slot: null, sessionId: null, roster: '', deleted: false, unsubs: [] });
+}
+
+/** Séance supprimée (ailleurs) pendant l'appel : la liste reste affichée mais ne coche plus rien. */
+function markDeleted() {
+  if (ui.deleted) return;
+  ui.deleted = true;
+  ui.slot.classList.add('is-deleted');
+  for (const b of ui.slot.querySelectorAll('button')) b.setAttribute('aria-disabled', 'true');
 }
 
 const find = (sel) => ui.slot?.querySelector(sel) ?? null;
@@ -36,7 +47,12 @@ const rosterOf = (list) => JSON.stringify(list.map((sw) => [sw.id, sw.firstname,
 function refresh() {
   const { slot, sessionId } = ui;
   if (!slot || !sessionId) return;
-  const list = rollCallList(db.sessions.get(sessionId) ?? { id: sessionId, date: ui.date });
+  const session = rollCallSession(sessionId);
+  if (!session) {
+    markDeleted();
+    return;
+  }
+  const list = rollCallList(session);
   const roster = rosterOf(list);
   const box = find('#presence-list');
   if (roster !== ui.roster) {
@@ -79,25 +95,37 @@ function mount(slot, { id, date, isNew }) {
   discardDrafts(); // une feuille fermée sans enregistrer : ses coches sont oubliées
   if (!slot) return;
   if (isNew) startDraft(id, date);
-  Object.assign(ui, { slot, sessionId: id, date });
+  Object.assign(ui, { slot, sessionId: id });
   slot.innerHTML = rollCallHtml();
   refresh();
   ui.unsubs = ['presence', 'swimmers', 'groups', 'sessions'].map((t) => subscribe(t, onStore));
 }
 
+/** @returns {boolean} vrai si l'appel peut être modifié ; sinon prévient et bloque la liste */
+function usable() {
+  if (!ui.sessionId) return false;
+  if (!ui.deleted && rollCallSession(ui.sessionId)) return true;
+  markDeleted();
+  toast(DELETED);
+  return false;
+}
+
 on('toggle-presence', (row) => {
+  if (!usable()) return;
   const { sessionId } = ui;
-  if (!sessionId) return;
-  togglePresence(sessionId, row.dataset.id, !isPresent(sessionId, row.dataset.id));
+  if (!togglePresence(sessionId, row.dataset.id, !isPresent(sessionId, row.dataset.id))) {
+    usable();
+    return;
+  }
   refresh(); // un brouillon ne passe pas par le store
 });
 on('presence-all', () => {
-  if (!ui.sessionId) return;
+  if (!usable()) return;
   setAllPresence(ui.sessionId, true);
   refresh();
 });
 on('presence-none', () => {
-  if (!ui.sessionId) return;
+  if (!usable()) return;
   setAllPresence(ui.sessionId, false);
   refresh();
 });
@@ -105,6 +133,9 @@ on('presence-none', () => {
 /** Branche l'appel sur la feuille séance du calendrier. */
 export function registerPresence() {
   onSessionFormOpen(mount);
+  onSessionSaving(({ id, isNew }) => {
+    if (isNew) protectDraft(id); // ses coches survivent à une autre feuille ouverte pendant l'envoi
+  });
   onSessionSaved(({ session, isNew }) => {
     if (isNew) commitDraft(session.id); // après la ligne de la séance dans la file
   });

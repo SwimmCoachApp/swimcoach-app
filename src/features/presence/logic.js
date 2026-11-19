@@ -13,7 +13,7 @@ import { db, onReset } from '../../core/store.js';
 import { saveRow, removeRow } from '../../core/data.js';
 import { swimmerInSeason, seasonOfDateKey } from '../../core/season.js';
 
-/** @type {Map<string, {date: string|null, ids: Set<string>}>} brouillons des séances pas encore enregistrées */
+/** @type {Map<string, {date: string|null, ids: Set<string>, saving?: boolean}>} brouillons des séances pas encore enregistrées */
 const drafts = new Map();
 onReset(() => drafts.clear());
 
@@ -31,9 +31,19 @@ export function startDraft(sessionId, date) {
   drafts.set(sessionId, { date, ids: new Set() });
 }
 
-/** Oublie les coches de toutes les séances non enregistrées (feuille fermée sans enregistrer). */
+/**
+ * Met à l'abri le brouillon d'une séance dont l'enregistrement commence : discardDrafts ne le touche plus
+ * (une autre feuille peut s'ouvrir pendant l'envoi de la photo) ; commitDraft l'envoie.
+ * @param {string} sessionId
+ */
+export function protectDraft(sessionId) {
+  const draft = drafts.get(sessionId);
+  if (draft) draft.saving = true;
+}
+
+/** Oublie les coches des séances non enregistrées (feuille fermée sans enregistrer), sauf celles en cours d'enregistrement. */
 export function discardDrafts() {
-  drafts.clear();
+  for (const [id, draft] of drafts) if (!draft.saving) drafts.delete(id);
 }
 
 /**
@@ -68,23 +78,26 @@ export function isPresent(sessionId, swimmerId) {
 
 /**
  * Coche ou décoche un nageur : une op pour ce nageur seulement (aucune si rien ne change).
- * Séance pas encore enregistrée : la coche reste en mémoire jusqu'à commitDraft.
+ * Séance pas encore enregistrée (brouillon) : la coche reste en mémoire jusqu'à commitDraft.
+ * Séance inconnue (supprimée ailleurs) : rien n'est fait, aucun brouillon n'est créé.
  * @param {string} sessionId
  * @param {string} swimmerId
  * @param {boolean} present
+ * @returns {boolean} false si la séance n'existe pas (ou plus)
  */
 export function togglePresence(sessionId, swimmerId, present) {
-  if (!drafts.has(sessionId) && !db.sessions.has(sessionId)) startDraft(sessionId, null);
   const draft = drafts.get(sessionId);
   if (draft) {
     if (present) draft.ids.add(swimmerId);
     else draft.ids.delete(swimmerId);
-    return;
+    return true;
   }
+  if (!db.sessions.has(sessionId)) return false;
   const key = presenceKey(sessionId, swimmerId);
-  if (present === db.presence.has(key)) return;
+  if (present === db.presence.has(key)) return true;
   if (present) saveRow('presence', { session_id: sessionId, swimmer_id: swimmerId });
   else removeRow('presence', key);
+  return true;
 }
 
 /**
@@ -101,8 +114,13 @@ export function rollCallList(session) {
     .sort((a, b) => (a.lastname || '').localeCompare(b.lastname || '', 'fr') || (a.firstname || '').localeCompare(b.firstname || '', 'fr'));
 }
 
-/** Séance de l'appel : enregistrée, ou brouillon (seule sa date compte). */
-function sessionOf(sessionId) {
+/**
+ * Séance de l'appel, source unique de la liste et de la jauge : celle du store, sinon le brouillon
+ * (seule sa date compte), sinon null (séance supprimée).
+ * @param {string} sessionId
+ * @returns {object|null}
+ */
+export function rollCallSession(sessionId) {
   return db.sessions.get(sessionId) ?? (drafts.has(sessionId) ? { id: sessionId, date: drafts.get(sessionId).date } : null);
 }
 
@@ -112,7 +130,7 @@ function sessionOf(sessionId) {
  * @returns {{present: number, total: number}}
  */
 export function presenceGauge(sessionId) {
-  const list = rollCallList(sessionOf(sessionId));
+  const list = rollCallList(rollCallSession(sessionId));
   return { present: list.filter((sw) => isPresent(sessionId, sw.id)).length, total: list.length };
 }
 
@@ -124,7 +142,7 @@ export function presenceGauge(sessionId) {
  */
 export function setAllPresence(sessionId, present) {
   if (present) {
-    for (const sw of rollCallList(sessionOf(sessionId))) togglePresence(sessionId, sw.id, true);
+    for (const sw of rollCallList(rollCallSession(sessionId))) togglePresence(sessionId, sw.id, true);
     return;
   }
   const draft = drafts.get(sessionId);

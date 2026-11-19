@@ -3,7 +3,8 @@
  *
  * Présence (tâche 13) : la feuille de modification contient `#session-presence-slot`. Pour y monter l'appel,
  * enregistrer `onSessionFormOpen((slot, {id, date, isNew}) => …)` (appelé à chaque ouverture du formulaire,
- * `id` est déjà celui que la séance aura, même pour une nouvelle) et `onSessionSaved(({session, isNew}) => …)`.
+ * `id` est déjà celui que la séance aura, même pour une nouvelle), `onSessionSaving(({id, isNew}) => …)`
+ * (début de l'enregistrement) et `onSessionSaved(({session, isNew}) => …)`.
  */
 import { on } from '../../app/actions.js';
 import { registerScreen, openModal, closeModal } from '../../app/shell.js';
@@ -32,6 +33,7 @@ const ui = {
 };
 const openHooks = new Set();
 const savedHooks = new Set();
+const savingHooks = new Set();
 
 /** Appelle chaque crochet séparément : un crochet qui plante n'empêche ni les autres ni la suite. */
 function runHooks(hooks, ...args) {
@@ -51,6 +53,16 @@ function runHooks(hooks, ...args) {
 export function onSessionFormOpen(cb) {
   openHooks.add(cb);
   return () => openHooks.delete(cb);
+}
+
+/**
+ * @param {(info: {id: string, isNew: boolean}) => void} cb appelé au début de l'enregistrement, avant toute attente
+ *   (photo, envoi) : ce qui appartient à cette séance doit être mis à l'abri d'une autre feuille ouverte entre-temps
+ * @returns {() => void} désabonnement
+ */
+export function onSessionSaving(cb) {
+  savingHooks.add(cb);
+  return () => savingHooks.delete(cb);
 }
 
 /**
@@ -293,6 +305,7 @@ async function submitForm() {
   const form = ui.form;
   if (!form || form.saving) return;
   form.saving = true;
+  runHooks(savingHooks, { id: form.id, isNew: form.isNew });
   await form.picking?.catch(() => {}); // une photo en cours de réduction est attendue
   const online = navigator.onLine;
   const wantsPhotoChange = !!form.photo || form.removePhoto;
