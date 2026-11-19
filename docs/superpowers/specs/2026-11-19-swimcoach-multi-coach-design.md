@@ -1,6 +1,6 @@
 # SwimCoach App — version multi-entraîneurs : conception
 
-Date : 2026-11-19 · Statut : **brouillon à valider par Damien** · Langue de l'app : français
+Date : 2026-11-19 · Statut : **validé par Damien le 19/11/2026, puis révisé le même jour (espaces d'équipe partagés, section 6 bis)** · Langue de l'app : français
 
 ## 1. Intention
 
@@ -9,28 +9,28 @@ Damien (entraîneur au TOAC Natation) a une app qui fonctionne bien, `SwimCoach 
 Il veut une **nouvelle app, dans un dépôt et un projet Supabase séparés**, où :
 
 - chaque entraîneur (ses collègues du club) crée son compte, avec un e-mail et un mot de passe ;
-- chaque entraîneur voit **uniquement les nageurs qu'il a lui-même saisis**, et tout ce qui s'y rattache (séances, présences, perfs, planning) ;
+- les données (nageurs, séances, présences, perfs, planning) appartiennent à un **espace d'équipe**. Plusieurs entraîneurs s'occupent souvent du même groupe : chaque membre d'un espace voit et modifie les mêmes informations, et un entraîneur ne voit **que les espaces dont il est membre**. Un membre ajoute un collègue avec son adresse e-mail (section 6 bis) ;
 - le code est **découpé en modules** plutôt qu'en un seul gros fichier, pour faciliter les mises à jour ;
 - le montage est **prêt pour un éventuel passage sur Google Play et l'App Store**, plus tard.
 
-Pourquoi : suivre son propre groupe sans voir (ni abîmer) les données des collègues, tout en gardant l'outil que Damien connaît.
+Pourquoi : suivre son groupe avec les collègues qui l'encadrent aussi, sans voir (ni abîmer) les données des autres groupes, tout en gardant l'outil que Damien connaît. Un espace, c'est l'équivalent de l'ancienne app partagée, limité à ceux qui en sont membres.
 
 ## 2. Objectifs, non-objectifs, anti-objectifs
 
 **Objectifs**
-- Comptes par entraîneur, avec isolation **garantie par la base de données**, pas seulement par l'interface.
+- Comptes par entraîneur et espaces d'équipe partagés, avec isolation entre espaces **garantie par la base de données**, pas seulement par l'interface.
 - Toutes les fonctions de `club4` (liste en section 8), avec le design Club inchangé.
 - Dépôt modulaire, avec tests automatiques et mise en ligne automatique à chaque `push`.
 - Fondations « stores » : tout ce que les relecteurs Apple et Google exigent est déjà dans l'app (section 9).
 
 **Non-objectifs (cette phase)**
 - Reprise des données de l'ancienne app : on repart de zéro (l'import Excel existant reste disponible).
-- Partage de nageurs ou de groupes entre entraîneurs. Aucune impasse technique n'est créée pour plus tard (`coach_id` sur chaque ligne).
-- Rôle administrateur, tableau de bord du club, connexion Google ou Apple, notifications push.
+- Rôles différents dans un espace (tous les membres ont les mêmes droits), partage d'un seul nageur entre deux espaces, envoi automatique d'un e-mail d'invitation (le membre prévient son collègue lui-même).
+- Rôle administrateur du club, tableau de bord du club, connexion Google ou Apple, notifications push.
 - Nouveau design. Génération des projets natifs iOS/Android. Soumission aux stores.
 
 **Anti-objectifs (un échec même si « ça marche »)**
-- Un entraîneur qui voit, modifie ou supprime la moindre donnée d'un autre, y compris en appelant directement l'API ou en partageant le même téléphone.
+- Un entraîneur qui voit, modifie ou supprime la moindre donnée d'un espace dont il n'est pas membre, y compris en appelant directement l'API, en partageant le même téléphone ou après avoir été retiré de l'espace.
 - Une modification de l'ancienne app, de son dépôt (`ssephiroth31/Swimcoachpro`), de son Supabase ou de ses clés de stockage local.
 - Une mise en place que Damien ne sait plus faire évoluer : le circuit doit rester « on pousse, c'est en ligne ».
 
@@ -70,6 +70,7 @@ swimcoach-app/
     core/                          # client Supabase, session, cache local par entraîneur, synchro, dates, config
     features/
       auth/                        # connexion, inscription + code, mot de passe oublié, suppression du compte
+      teams/                       # espaces d'équipe : création, choix, membres, invitations
       contacts/                    # nageurs : liste, fiche, photo, groupes, archivage, import Excel
       calendar/                    # calendrier, panneau du jour, séances, photo de séance
       presence/                    # appel, jauge « N / M présents », appel compétition
@@ -109,31 +110,42 @@ Les noms de dossiers ci-dessus sont une proposition. Le constructeur peut les aj
 - Variante à évaluer par le constructeur : le « Before User Created hook » de Supabase. Le résultat doit être le même, et la règle doit tenir côté base.
 
 **Isolation (règle centrale)**
-- Chaque table métier a `coach_id uuid not null default auth.uid() references auth.users(id) on delete cascade`.
-- RLS activée sur **toutes** les tables, avec des politiques `select/insert/update/delete` limitées à `coach_id = (select auth.uid())` **et** à un compte activé.
-- Les lignes enfants (présences, performances, événements de planning) ne peuvent référencer que des lignes du même entraîneur : clés étrangères composites `(coach_id, id)` ou contrôle équivalent. Sinon, un entraîneur pourrait rattacher une ligne à un nageur d'un autre.
+- Chaque table métier a `team_id uuid not null references teams(id) on delete cascade` (l'espace auquel appartient la ligne).
+- RLS activée sur **toutes** les tables, avec des politiques `select/insert/update/delete` limitées aux espaces dont l'appelant est membre (`team_id` présent dans ses lignes de `team_members`) **et** à un compte activé.
+- Les lignes enfants (présences, performances) ne peuvent référencer que des lignes du même espace : clés étrangères composites `(team_id, id)`. Sinon, un membre pourrait rattacher une ligne à un nageur d'un autre espace.
 - Fonctions `security definer` : uniquement celles qui sont voulues, avec `revoke execute` pour `anon` et pour tout le reste. Le contrôle de sécurité de l'École de natation montre déjà ce piège. Lancer les contrôles de sécurité Supabase après chaque migration.
 - Aucune clé `service_role` dans l'app ni dans le dépôt. Dans l'app : l'URL et la clé publique uniquement (publiques par conception).
 
-**Photos** : stockage Supabase dans un espace **privé**, un dossier par entraîneur (`<coach_id>/...`), avec politiques de stockage sur ce dossier. Redimensionnement dans le navigateur avant envoi. L'ancienne app les stockait en base64 dans chaque ligne : plus lourd et peu sûr.
+**Photos** : stockage Supabase dans un bucket **privé**, un dossier par espace d'équipe (`<team_id>/...`), avec politiques de stockage réservées aux membres de l'espace. Redimensionnement dans le navigateur avant envoi. L'ancienne app les stockait en base64 dans chaque ligne : plus lourd et peu sûr.
 
-**Cache local** : le cache hors ligne est rangé sous `swimcoach2_<id entraîneur>_...`. À la déconnexion, tout `swimcoach2_*` lié à l'entraîneur est effacé. Deux entraîneurs sur le même téléphone ne voient jamais les données l'un de l'autre.
+**Cache local** : le cache hors ligne est rangé sous `swimcoach2_<id entraîneur>_<id espace>_...`. À la déconnexion, tout `swimcoach2_*` lié à l'entraîneur est effacé. Deux entraîneurs sur le même téléphone ne voient jamais les données l'un de l'autre, même s'ils partagent un espace. Si un entraîneur est retiré d'un espace, le cache de cet espace est effacé à la synchro suivante.
 
 **Hors ligne** : `club4` n'a pas de vraie file d'attente d'écritures. Il fonctionne en « local d'abord » : au démarrage, il fusionne le cloud et le local, puis renvoie les éléments présents seulement en local (nageurs, séances, planning), avec un marqueur « en attente » pour les présences. La nouvelle app garde ce comportement et le rend plus solide (choix du rédacteur) :
 - file d'attente persistante pour les nageurs, séances, présences et planning, avec identifiants `uuid` créés côté app, colonne `updated_at` et écritures idempotentes (`upsert`) ;
 - les photos exigent le réseau (pas de file d'attente pour elles) ;
 - **déconnexion avec modifications non synchronisées** : l'app prévient (« N modifications ne sont pas encore envoyées »), propose d'attendre le réseau ou de se déconnecter quand même, et dans ce cas les efface avec le reste du cache.
 
-**Temps réel** : conservé pour synchroniser les appareils du **même** entraîneur (filtre sur son `coach_id`, RLS appliquée). Le constructeur peut le remplacer par un rechargement à la reprise de l'app si c'est plus simple.
+**Temps réel** : conservé pour synchroniser les appareils de tous les membres de l'espace ouvert (filtre sur son `team_id`, RLS appliquée). C'est indispensable maintenant que plusieurs entraîneurs font l'appel du même groupe. Les présences restent envoyées nageur par nageur, pour que deux entraîneurs qui cochent en même temps ne s'écrasent pas.
 
-**Suppression du compte** (exigée par Apple) : bouton dans l'app → fonction `delete-account` qui supprime les fichiers de stockage, puis l'utilisateur ; les lignes partent en cascade.
+**Suppression du compte** (exigée par Apple) : bouton dans l'app → fonction `delete-account`. Elle supprime les espaces dont l'utilisateur est le **seul** membre (avec leurs fichiers de stockage), puis l'utilisateur. Les espaces partagés restent intacts pour les autres membres.
+
+## 6 bis. Espaces d'équipe
+
+- Un **espace** (ex. « Pôle Formation 1 ») contient ses groupes, nageurs, séances, présences, planning et perfs. C'est l'équivalent d'une ancienne app partagée.
+- Un entraîneur peut être membre de **plusieurs espaces**. Il en a toujours un ouvert, et il change d'espace depuis la barre du haut ou les réglages. L'app retient le dernier ouvert.
+- Après activation par le code du club : si une invitation l'attend, il rejoint l'espace automatiquement ; sinon, l'app lui propose de **créer son espace** (nom libre).
+- **Tous les membres ont les mêmes droits** (choix de Damien) : consulter et modifier toutes les données de l'espace, renommer l'espace, ajouter un entraîneur, retirer un membre, quitter l'espace.
+- **Ajouter un entraîneur** : un membre saisit l'adresse e-mail du collègue. Si un compte confirmé existe avec cette adresse, il devient membre tout de suite. Sinon, l'**invitation reste en attente** et il rejoint l'espace dès qu'il crée son compte avec cette adresse et que celle-ci est confirmée. Aucun e-mail n'est envoyé par l'app pour l'invitation dans cette phase : le membre prévient son collègue. Les invitations en attente sont visibles et annulables par les membres. Limite : environ 20 invitations par heure et par entraîneur.
+- **Retirer un membre** ou **quitter** : l'entraîneur concerné perd l'accès immédiatement (la base le refuse), et son cache de l'espace est effacé à la synchro suivante, avec le message « Tu n'as plus accès à l'espace … ». Le dernier membre ne peut pas quitter l'espace : il doit le supprimer explicitement (« Supprimer l'espace et toutes ses données »).
+- Liste des membres : nom affiché et adresse e-mail. Un entraîneur ne voit les adresses que des membres de ses propres espaces.
+- Toutes ces règles sont appliquées par des fonctions côté base (`create_team`, `add_team_member`, `remove_team_member`, `cancel_invite`, `delete_team`, rattachement des invitations à la confirmation), jamais seulement par l'interface.
 
 **Proxy liveffn** : le contrat se lit dans `club4` (le code de l'ancienne fonction n'est pas dans le dépôt). Le client appelle `GET <proxy>?competition=<id>&structure=39` (délai de 15 s) et reçoit le **texte de la page liveffn** ; toute l'analyse (épreuves, temps, rangs, points, fractionnés) et le rattachement aux nageurs se font **dans l'app** (`parse…` et `matchSwimmersToDB`). Le rattachement se fait par **nom + prénom normalisés** (essai aussi inversé), avec la logique de saison de `club4` (nageur actif ou présent dans la saison, archivés ignorés). Aucun numéro de licence n'est utilisé.
 La nouvelle fonction `liveffn-proxy` ne fait que **relayer** la page : JWT obligatoire (l'ancienne était déployée sans vérification, donc ouverte à tous), liste blanche du seul domaine liveffn, id de structure 39 en configuration, en-têtes CORS pour l'appel avec jeton. Le code d'analyse de `club4` est repris tel quel dans `features/perfs/`.
 
 ## 7. Modèle de données
 
-Tables de la nouvelle base, d'après l'usage de `club4` : `coaches` (profil, `activated_at`), `groups`, `swimmers`, `sessions`, `presence`, `plan_weeks`, `plan_events`, `performances`, plus la table du code du club et un compteur d'essais.
+Tables de la nouvelle base, d'après l'usage de `club4` : `coaches` (profil, e-mail, `activated_at`), `teams`, `team_members`, `team_invites`, `groups`, `swimmers`, `sessions`, `presence`, `plan_weeks`, `plan_events`, `performances`, plus la table du code du club et un compteur d'essais.
 
 - Identifiants `uuid` créés côté app, avec `updated_at` sur chaque table (voir « Hors ligne »). Les nageurs portent leur logique de saison de `club4` (saison d'arrivée, archivage). Les performances ne dépendent d'aucun numéro de licence : le rattachement se fait par nom. Présence en `upsert` sur `(session_id, swimmer_id)` (l'ancienne app envoyait des opérations par nageur pour éviter les écrasements : à conserver).
 - Récupération paginée (limite de 1000 lignes de Supabase).
@@ -171,13 +183,14 @@ En cas de doute sur un comportement, **le code de `club4` fait foi**.
 
 ## 10. Tests et critères d'acceptation
 
-1. **Isolation (automatique)** : deux comptes activés A et B. Avec le jeton de B, toute lecture, insertion, modification ou suppression sur les lignes de A échoue, pour chaque table et chaque fichier de stockage, y compris en référençant des lignes de A depuis une ligne de B.
+1. **Isolation (automatique)** : deux comptes activés A et B dans deux espaces différents. Avec le jeton de B, toute lecture, insertion, modification ou suppression sur les lignes de l'espace de A échoue, pour chaque table et chaque fichier de stockage, y compris en référençant des lignes de A depuis une ligne de B.
+1 bis. **Partage (automatique)** : C est ajouté à l'espace de A. C lit et modifie les données de l'espace, A voit les modifications de C. Une fois C retiré, il ne lit plus rien. Une invitation en attente pour l'adresse de D est rattachée quand D confirme son adresse, et pas avant. Le dernier membre ne peut pas quitter son espace.
 2. Un compte non activé ne voit rien et ne peut rien écrire.
 3. L'inscription exige le code ; trop d'essais sont refusés.
 4. **Même navigateur** : A se déconnecte, B se connecte, aucune trace des données de A (cache, photos, PDF).
 5. L'app ne touche à aucune clé de stockage local sans le préfixe `swimcoach2_` et n'appelle jamais l'ancien projet Supabase (contrôle automatique dans la CI).
 6. Parité : un test de bout en bout par écran (calendrier, contacts, présences, stats, planning, perfs) et un par PDF.
-7. Suppression du compte : l'utilisateur, ses lignes et ses fichiers disparaissent.
+7. Suppression du compte : l'utilisateur disparaît, ainsi que les espaces dont il était le seul membre (lignes et fichiers). Les espaces partagés restent intacts pour les autres membres.
 8. Hors ligne : en mode avion, les données déjà chargées restent consultables et les modifications se synchronisent au retour du réseau.
 9. `npm run build` produit un dossier déployable ; la CI (tests unitaires + build) passe avant chaque mise en ligne.
 10. Contrôles de sécurité Supabase : aucune alerte non justifiée par écrit.
