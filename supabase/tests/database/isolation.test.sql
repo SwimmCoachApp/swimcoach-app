@@ -6,7 +6,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 -- helpers:include
-select plan(141);
+select plan(142);
 
 create temp table ids (k text primary key, v uuid not null);
 grant select on ids to public;
@@ -50,7 +50,7 @@ insert into public.performances (id, team_id, swimmer_id, competition_id, event_
 insert into public.team_invites (team_id, email, invited_by) values
   (pg_temp.id('ta'), 'invite@example.test', pg_temp.id('a'));
 
--- ---------------------------------------------------------------- structure (12)
+-- ---------------------------------------------------------------- structure (13)
 select is((select count(*) from public.coaches)::int, 4, 'le trigger crée une ligne coaches par compte');
 select is((select email from public.coaches where id = pg_temp.id('c')), 'coach.c@example.test', 'e-mail recopié en minuscules');
 select ok((select activated_at is null from public.coaches where id = pg_temp.id('e')), 'un nouveau compte est inactif');
@@ -68,8 +68,11 @@ select ok(not has_function_privilege('anon', 'private.is_team_member(uuid)', 'ex
 select ok(has_function_privilege('authenticated', 'private.is_team_member(uuid)', 'execute')
           and has_function_privilege('authenticated', 'private.is_active_coach()', 'execute'), 'authenticated exécute les deux fonctions d’appartenance');
 select ok(not has_function_privilege('authenticated', 'private.handle_new_user()', 'execute')
-          and not has_function_privilege('authenticated', 'private.set_updated_at()', 'execute'), 'les fonctions de trigger ne sont pas exécutables par les clients');
+          and not has_function_privilege('authenticated', 'private.set_updated_at()', 'execute')
+          and not has_function_privilege('authenticated', 'private.handle_user_email_change()', 'execute'), 'les fonctions de trigger ne sont pas exécutables par les clients');
 select ok(not has_schema_privilege('anon', 'private', 'usage'), 'anon n’a pas accès au schéma private');
+update auth.users set email = 'Nouveau.A@Example.TEST' where id = pg_temp.id('a');
+select is((select email from public.coaches where id = pg_temp.id('a')), 'nouveau.a@example.test', 'coaches.email suit le changement d’e-mail du compte (minuscules)');
 
 -- ---------------------------------------------------------------- B, non-membre de TA (51)
 select tests.as_coach(pg_temp.id('b'));
@@ -179,7 +182,7 @@ select is((select count(*) from public.performances where team_id=pg_temp.id('ta
 select is((select count(*) from public.teams)::int, 1, 'C lit son espace TA, pas TB');
 select is((select count(*) from public.team_members)::int, 3, 'C lit les membres de TA');
 select is((select count(*) from public.team_invites)::int, 1, 'C lit les invitations de TA');
-select is((select count(*) from public.coaches)::int, 2, 'C voit A et lui-même, pas B');
+select is((select count(*) from public.coaches)::int, 3, 'C voit tous les membres de TA (A, E et lui-même), pas B');
 select is((select count(*) from public.swimmers where team_id=pg_temp.id('tb'))::int, 0, 'C ne lit pas les nageurs de TB');
 -- insertion
 select lives_ok($$insert into public.groups(id,team_id,name) values (pg_temp.id('gc'), pg_temp.id('ta'), 'Minimes')$$, 'C crée un groupe dans TA');

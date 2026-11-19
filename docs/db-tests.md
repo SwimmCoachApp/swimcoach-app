@@ -6,7 +6,7 @@ Fichiers : `supabase/tests/database/`
   (`tests.create_coach(email, activé)`, `tests.create_team(nom, membres)`,
   `tests.as_coach(id)`). C'est aussi un fichier pgTAP valide (3 assertions).
   La partie utile est entre les marqueurs `-- helpers:start` et `-- helpers:end`.
-- `isolation.test.sql` : isolation entre espaces d'équipe (141 assertions). Il
+- `isolation.test.sql` : isolation entre espaces d'équipe (142 assertions). Il
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
 
 Règle d'écriture : chaque assertion pgTAP commence **en début de ligne** par
@@ -24,6 +24,12 @@ supabase test db       # pg_prove sur supabase/tests/, par ordre alphabétique
 
 `00_helpers.sql` passe en premier et **valide** (`commit`) les fonctions de test dans
 la base locale jetable ; `isolation.test.sql` les utilise ensuite.
+
+## Noms des migrations
+
+Après `apply_migration`, le fichier de `supabase/migrations/` est renommé avec la
+version enregistrée par le projet hébergé (`list_migrations`), pour que l'historique
+local et l'historique distant concordent.
 
 ## Sur le projet hébergé (sans Docker)
 
@@ -45,7 +51,7 @@ Le script :
    `00_helpers.sql`), `select string_agg(line, E'\n' order by n) as tap from pg_temp.tap_out;`.
 
 On envoie le contenu produit avec `execute_sql` : le résultat est la sortie TAP
-complète (`1..141`, puis `ok 1 - ...`). Si une instruction hors assertion échoue
+complète (`1..142`, puis `ok 1 - ...`). Si une instruction hors assertion échoue
 (table absente, par exemple), toute la requête échoue et la transaction est annulée.
 
 Après un passage, vérifier qu'il ne reste rien :
@@ -62,6 +68,7 @@ mais inscrit dans `team_members` de TA ; D (à la fin) activé, membre de TA et 
 Des lignes de TA dans chaque table métier.
 
 - Structure : trigger `on_auth_user_created` (e-mail en minuscules, compte inactif),
+  synchro de `coaches.email` quand l'e-mail du compte change,
   publication temps réel, RLS sur toutes les tables, 34 politiques, aucun droit pour
   `anon`, pas de `TRUNCATE` pour `authenticated`, droits des fonctions `private`.
 - B (non-membre) : lecture, insertion, modification, suppression refusées sur les 7
@@ -69,7 +76,8 @@ Des lignes de TA dans chaque table métier.
   `TRUNCATE` ; pas de déplacement vers TA ; clés composites (présence, perf, groupe).
   Contrôle en `postgres` ensuite : TA est intacte.
 - E (membre non activé) : ne voit rien, n'écrit rien ; voit seulement sa ligne `coaches`.
-- C (membre activé) : lit, crée, modifie, supprime dans les 7 tables métier ;
+- C (membre activé) : voit tous les membres de TA dans `coaches` (A, E et lui) ;
+  lit, crée, modifie, supprime dans les 7 tables métier ;
   `updated_by`, `updated_at` qui ne recule pas, renommage de l'espace (et nom vide
   refusé), `display_name` seul modifiable ; aucune écriture directe sur
   `teams`/`team_members`/`team_invites`.
