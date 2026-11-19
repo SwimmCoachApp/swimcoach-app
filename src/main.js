@@ -11,6 +11,7 @@ import './styles/base.css';
 import './styles/contacts.css'; // avant club.css : l'habillage Club surcharge les bases
 import './styles/calendar.css';
 import './styles/presence.css';
+import './styles/stats.css';
 import './styles/club.css';
 import './styles/auth.css';
 import { initSession, getCoach, onCoachChange, onPasswordRecovery, isRecovering, configureSession } from './core/session.js';
@@ -25,6 +26,7 @@ import { startApp } from './app/shell.js';
 import { registerPlaceholderScreens } from './app/screens.js';
 import { registerContactsScreen } from './features/contacts/index.js';
 import { registerCalendarScreen } from './features/calendar/index.js';
+import { registerStatsScreen } from './features/stats/index.js';
 import { registerPresence } from './features/presence/index.js';
 import { initTheme } from './app/theme.js';
 import { toast } from './app/toast.js';
@@ -42,6 +44,7 @@ registerPlaceholderScreens();
 registerContactsScreen();
 registerCalendarScreen();
 registerPresence();
+registerStatsScreen();
 initUpdate();
 
 /** Garde de démarrage : choisit l'écran selon la session, l'activation et les espaces. */
