@@ -9,7 +9,8 @@ import {
   listSwimmers, listGroups, countSwimmers, saveSwimmer, archiveSwimmer, restoreSwimmer, deleteSwimmer, addGroup, deleteGroup, mailGroups, groupMail,
 } from './logic.js';
 import { currentTeamName } from '../../app/shell.js';
-import { screenHtml, listHtml, mailOptionsHtml, ficheHtml, formHtml, groupBlockHtml, deleteDialogHtml, archiveDialogHtml } from './view.js';
+import { parseImportFile, planImport, runImport, loadExcelReader, downloadTemplate } from './import.js';
+import { screenHtml, importChooseHtml, importPreviewHtml, listHtml, mailOptionsHtml, ficheHtml, formHtml, groupBlockHtml, deleteDialogHtml, archiveDialogHtml } from './view.js';
 
 const SEARCH_DELAY_MS = 150;
 const REOPEN_FICHE_MS = 350; // iOS PWA : laisser la feuille précédente se fermer
@@ -314,6 +315,78 @@ on('restore', (btn) => {
   if (!sw) return;
   restoreSwimmer(sw.id);
   toast(`${sw.firstname} restauré·e`);
+});
+
+// ── Import Excel / CSV ──
+/** @type {{token: number, plan: object|null, selected: Set<number>, newGroups: string[], warnings: string[], busy: boolean}} */
+const imp = { token: 0, plan: null, selected: new Set(), newGroups: [], warnings: [], busy: false };
+
+function renderImport() {
+  const sheet = el('import-sheet');
+  if (!sheet) return;
+  sheet.innerHTML = imp.plan
+    ? importPreviewHtml(imp.plan, { selected: imp.selected, newGroups: imp.newGroups, warnings: imp.warnings, busy: imp.busy })
+    : importChooseHtml({ errors: imp.warnings, busy: imp.busy });
+}
+
+on('import-open', () => {
+  imp.token += 1;
+  Object.assign(imp, { plan: null, selected: new Set(), newGroups: [], warnings: [], busy: false });
+  renderImport();
+  openModal('modal-import');
+  loadExcelReader().catch(() => { /* rechargé à la lecture du fichier */ });
+});
+on('import-choose', () => el('import-file')?.click());
+on('import-template', downloadTemplate);
+on('import-file', async (input) => {
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  const token = ++imp.token;
+  Object.assign(imp, { plan: null, warnings: [], busy: true });
+  renderImport();
+  const { rows, errors } = await parseImportFile(file);
+  if (token !== imp.token || !alive()) return;
+  imp.busy = false;
+  if (rows.length === 0) {
+    imp.warnings = errors;
+    renderImport();
+    return;
+  }
+  imp.plan = planImport(rows, [...db.swimmers.values()]);
+  imp.selected = new Set(imp.plan.toCreate.map((_, i) => i));
+  imp.warnings = errors;
+  const known = new Set(listGroups().map((g) => g.name.trim().toLowerCase()));
+  imp.newGroups = [...new Map(imp.plan.toCreate.map((r) => r.group.trim()).filter((g) => g && !known.has(g.toLowerCase())).map((g) => [g.toLowerCase(), g])).values()];
+  renderImport();
+}, 'change');
+on('import-toggle', (btn) => {
+  const i = Number(btn.dataset.i);
+  if (imp.selected.has(i)) imp.selected.delete(i);
+  else imp.selected.add(i);
+  renderImport();
+});
+on('import-cancel', () => {
+  imp.token += 1;
+  closeModal('modal-import');
+});
+on('import-confirm', async () => {
+  if (!imp.plan || imp.busy) return;
+  const rows = imp.plan.toCreate.filter((_, i) => imp.selected.has(i));
+  if (rows.length === 0) {
+    toast('❗ Aucun nageur sélectionné');
+    return;
+  }
+  imp.busy = true;
+  renderImport();
+  const skipped = imp.plan.duplicates.length;
+  const { created } = await runImport(rows);
+  imp.token += 1;
+  imp.busy = false;
+  closeModal('modal-import');
+  toast(created > 0
+    ? `✅ Vous avez transféré ${created} nageur${created > 1 ? 's' : ''}${skipped ? ` · ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}`
+    : '⚠️ Aucun nouveau nageur transféré');
 });
 
 /** Enregistre l'écran Nageurs (remplace l'écran provisoire). */

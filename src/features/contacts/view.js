@@ -27,11 +27,16 @@ export function screenHtml() {
       <select class="group-mail-select" id="group-mail-select" data-action="mail-group" data-on="change" aria-label="Groupe à écrire"></select>
       <a class="group-mail-btn" id="group-mail-link" data-action="group-mail" href="#">✉️ Mail groupe</a>
     </div>
+    <button type="button" class="import-btn" data-action="import-open">📊 Importer depuis Excel / CSV</button>
     <div class="contacts-list" id="contacts-list"></div>
   </div>
   <button type="button" class="fab" data-action="add-swimmer" aria-label="Ajouter un nageur">+</button>
   <div class="modal-overlay" id="modal-contact" data-action="close-backdrop"><div class="contact-popup" role="dialog" aria-label="Fiche du nageur" id="contact-popup"></div></div>
   <div class="modal-overlay" id="modal-swimmer" data-action="close-backdrop"><div class="modal-sheet" role="dialog" aria-label="Nageur" id="swimmer-sheet"></div></div>
+  <div class="modal-overlay" id="modal-import" data-action="close-backdrop"><div class="modal-sheet" role="dialog" aria-label="Importer des nageurs">
+    <input type="file" class="visually-hidden" id="import-file" data-action="import-file" data-on="change" accept=".xlsx,.csv,text/csv" aria-label="Fichier à importer" tabindex="-1">
+    <div id="import-sheet"></div>
+  </div></div>
   <div class="modal-overlay dialog" id="dialog-contact" data-action="close-backdrop"><div class="dialog-box" role="dialog" id="dialog-box"></div></div>`;
 }
 
@@ -177,4 +182,64 @@ export function archiveDialogHtml(sw, seasons, current) {
     <div class="dialog-sub">Dernière saison faite :</div>
     <div class="dialog-list">${seasons.map((s) => raw(html`<button type="button" class="archive-season-btn${s === current ? ' default' : ''}" data-action="do-archive" data-id="${sw.id}" data-season="${s}">Saison ${seasonLabel(s)}</button>`))}</div>
     <div class="dialog-actions"><button type="button" class="btn-full btn-ghost" data-action="close-modal" data-id="dialog-contact">Annuler</button></div>`;
+}
+
+const plural = (n, one, many) => (n > 1 ? many : one);
+const nameOf = (r) => `${r.firstname} ${r.lastname}`.trim();
+const nameList = (rows) => {
+  const shown = rows.slice(0, 20).map(nameOf).join(', ');
+  return rows.length > 20 ? `${shown}…` : shown;
+};
+const importHeader = html`<div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">Importer des nageurs</div>
+      <button type="button" class="modal-close" data-action="close-modal" data-id="modal-import" aria-label="Fermer">✕</button>
+    </div>`;
+
+/**
+ * Première étape de l'import : choix du fichier (ou lecture en cours).
+ * @param {{errors?: string[], busy?: boolean}} [opts] errors : messages du dernier fichier refusé
+ * @returns {string}
+ */
+export function importChooseHtml({ errors = [], busy = false } = {}) {
+  return html`${raw(importHeader)}
+    <div class="modal-body">
+      <p class="import-help">Un fichier Excel (.xlsx) ou CSV avec les colonnes Nom, Prénom, Date de naissance, Email, Téléphone et Groupe. Les nageurs déjà présents ne sont pas recréés.</p>
+      ${errors.map((e) => raw(html`<div class="import-error" role="alert">❗ ${e}</div>`))}
+      ${busy ? raw('<div class="import-help" role="status">📄 Lecture du fichier…</div>') : ''}
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn-full btn-ghost" data-action="import-template">⬇️ Télécharger le modèle</button>
+      <button type="button" class="btn-full btn-accent" data-action="import-choose"${busy ? raw(' disabled') : ''}>📄 Choisir un fichier</button>
+    </div>`;
+}
+
+/**
+ * Aperçu avant création (tout texte du fichier est échappé).
+ * @param {{toCreate: object[], duplicates: object[], ignoredArchived: object[]}} plan
+ * @param {{selected: Set<number>, newGroups: string[], warnings: string[], busy: boolean}} view
+ * @returns {string}
+ */
+export function importPreviewHtml(plan, { selected, newGroups, warnings, busy }) {
+  const n = selected.size;
+  return html`${raw(importHeader)}
+    <div class="modal-body">
+      <div class="import-preview-header" id="import-summary">${plan.toCreate.length} à créer, ${plan.duplicates.length} doublons, 📦 ${plan.ignoredArchived.length} archivés ignorés</div>
+      ${warnings.slice(0, 5).map((w) => raw(html`<div class="import-warning">⚠️ ${w}</div>`))}
+      ${warnings.length > 5 ? raw(html`<div class="import-warning">⚠️ … et ${warnings.length - 5} autres avertissements</div>`) : ''}
+      <div class="import-preview-rows">${plan.toCreate.map((r, i) => raw(html`<div class="import-preview-row">
+        <button type="button" class="imp-check${selected.has(i) ? ' on' : ''}" data-action="import-toggle" data-i="${i}" role="checkbox" aria-checked="${selected.has(i) ? 'true' : 'false'}" aria-label="${nameOf(r)}">${selected.has(i) ? '✓' : ''}</button>
+        <div class="import-row-info">
+          <div class="import-row-name">${nameOf(r)}</div>
+          <div class="import-row-sub">${[r.group || 'Sans groupe', r.dob, r.phone].filter(Boolean).join(' · ')}</div>
+        </div>
+      </div>`))}</div>
+      ${newGroups.length ? raw(html`<div class="import-note">📁 ${newGroups.length} ${plural(newGroups.length, 'groupe sera créé', 'groupes seront créés')} : ${newGroups.join(', ')}</div>`) : ''}
+      ${plan.duplicates.length ? raw(html`<div class="import-note">Déjà présents : ${nameList(plan.duplicates)}</div>`) : ''}
+      ${plan.ignoredArchived.length ? raw(html`<div class="import-note">📦 Archivés (non recréés) : ${nameList(plan.ignoredArchived)}</div>`) : ''}
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn-full btn-ghost" data-action="import-cancel">✕ Annuler</button>
+      <button type="button" class="btn-full btn-accent" data-action="import-confirm"${busy ? raw(' disabled') : ''}>✅ Importer ${n} ${plural(n, 'nageur', 'nageurs')}</button>
+    </div>`;
 }
