@@ -21,7 +21,7 @@ export const PAGE_SIZE = 1000;
 /** Colonnes de tri (clé primaire) pour une pagination stable. */
 const ORDER = { presence: ['session_id', 'swimmer_id'], plan_weeks: ['week_key'] };
 
-let hooks = { toast: () => {}, onTeamLost: () => {} };
+let hooks = { toast: () => {}, onTeamLost: () => {}, onSynced: () => {} };
 /** @type {{coachId: string, team: {id: string, name: string}}|null} */
 let current = null;
 const checks = new Map();
@@ -34,6 +34,7 @@ const applied = new Map();
  * @param {{toast?: (msg: string) => void, onTeamLost?: (next: {id: string, name: string}|null) => void}} deps
  *   toast : message court ; onTeamLost : l'espace ouvert n'est plus accessible, `next` est l'espace
  *   à ouvrir (déjà choisi comme espace courant) ou null (écran « Crée ton espace »).
+ *   onSynced : appelé quand les 7 tables viennent d'être lues et fusionnées sans erreur ni lecture périmée.
  */
 export function configureSync(deps = {}) {
   hooks = { ...hooks, ...deps };
@@ -179,9 +180,13 @@ export async function initialSync() {
   if (!ctx) return false;
   if ((await checkMembership()) !== 'member' || !isOpen(ctx)) return false;
   try {
+    let complete = true;
     for (const table of TABLES) {
-      if ((await refreshTable(table, ctx)) === 'closed') return false;
+      const res = await refreshTable(table, ctx);
+      if (res === 'closed') return false;
+      if (res !== 'merged') complete = false;
     }
+    if (complete && isOpen(ctx)) hooks.onSynced();
     await flush(supabase, ctx.coachId, ctx.teamId);
   } catch {
     return false;

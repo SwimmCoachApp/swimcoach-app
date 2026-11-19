@@ -3,10 +3,6 @@ import { db, deleteLocal } from '../../core/store.js';
 import { saveRow, removeRow } from '../../core/data.js';
 import { currentSeason, swimmerIsActive } from '../../core/season.js';
 import { uploadPhoto, deletePhoto } from '../../core/photos.js';
-import { supabase } from '../../core/supabase.js';
-
-/** Groupes créés avec un nouvel espace (club4). */
-export const DEFAULT_GROUPS = ['Benjamins', 'École de natation', 'Loisirs', 'Pôle Formation 1', 'Compétition', 'Autre'];
 
 const uuid = () => crypto.randomUUID();
 const fold = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -14,17 +10,6 @@ const fold = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 /** Colonnes de `swimmers` écrites par l'app (le reste est posé par le serveur). */
 const SWIMMER_COLUMNS = ['id', 'team_id', 'firstname', 'lastname', 'dob', 'group_id', 'phone', 'email', 'photo_path', 'joined_season', 'left_season'];
 const swimmerRow = (sw) => Object.fromEntries(SWIMMER_COLUMNS.filter((c) => c in sw).map((c) => [c, sw[c]]));
-
-/**
- * Crée les groupes par défaut d'un espace qui vient d'être créé (une seule fois, à la création).
- * @param {string} teamId
- * @returns {Promise<boolean>} false si l'envoi a échoué (l'espace reste utilisable, sans groupes)
- */
-export async function createDefaultGroups(teamId) {
-  const rows = DEFAULT_GROUPS.map((name, i) => ({ id: uuid(), team_id: teamId, name, sort_order: i }));
-  const { error } = await supabase.from('groups').upsert(rows, { onConflict: 'team_id,name', ignoreDuplicates: true });
-  return !error;
-}
 
 /** @returns {object[]} groupes de l'espace, dans l'ordre */
 export function listGroups() {
@@ -128,7 +113,13 @@ export function restoreSwimmer(id) {
 export async function deleteSwimmer(id) {
   const sw = db.swimmers.get(id);
   if (!sw) return;
-  if (sw.photo_path) await deletePhoto(sw.photo_path);
+  if (sw.photo_path) {
+    try {
+      await deletePhoto(sw.photo_path);
+    } catch (e) {
+      throw Object.assign(new Error('Photo non supprimée'), { photo: true, network: !navigator.onLine || /fetch|network|failed/i.test(String(e?.message)) });
+    }
+  }
   removeRow('swimmers', id);
   for (const [key, p] of [...db.presence]) if (p.swimmer_id === id) deleteLocal('presence', key);
 }
@@ -156,4 +147,29 @@ export function deleteGroup(id) {
   if ([...db.swimmers.values()].some((s) => s.group_id === id)) return { ok: false, error: 'Des nageurs utilisent ce groupe' };
   removeRow('groups', id);
   return { ok: true };
+}
+
+const EMAIL = /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/;
+
+/** @returns {object[]} groupes qui ont au moins un nageur actif (liste du « Mail groupe ») */
+export function mailGroups() {
+  const used = new Set(listSwimmers({ filter: 'actifs' }).map((sw) => sw.group_id));
+  return listGroups().filter((g) => used.has(g.id));
+}
+
+/**
+ * Mail de groupe (club4) : adresses des nageurs actifs, en copie cachée.
+ * @param {string} groupId 'all' pour tous les actifs
+ * @param {string} teamName nom de l'espace (objet du message)
+ * @returns {{count: number, href: string}} href vide s'il n'y a aucune adresse valide
+ */
+export function groupMail(groupId, teamName) {
+  const emails = listSwimmers({ filter: 'actifs' })
+    .filter((sw) => groupId === 'all' || sw.group_id === groupId)
+    .map((sw) => (sw.email ?? '').trim())
+    .filter((e) => EMAIL.test(e));
+  if (emails.length === 0) return { count: 0, href: '' };
+  const group = groupId === 'all' ? '' : `[${db.groups.get(groupId)?.name ?? ''}] `;
+  const subject = encodeURIComponent(`${group}Message de ${teamName}`);
+  return { count: emails.length, href: `mailto:?bcc=${emails.map(encodeURIComponent).join(',')}&subject=${subject}` };
 }

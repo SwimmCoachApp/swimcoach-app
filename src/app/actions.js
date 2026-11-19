@@ -23,6 +23,15 @@ function dispatch(ev) {
 
 for (const type of Object.keys(handlers)) document.addEventListener(type, dispatch);
 
+// Un élément role="button" qui n'est pas un vrai bouton s'active aussi au clavier (Entrée, Espace).
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const el = ev.target instanceof Element ? ev.target : null;
+  if (!el || el.getAttribute('role') !== 'button' || !el.dataset.action || /^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+  ev.preventDefault();
+  el.click();
+});
+
 /**
  * Enregistre le handler d'une action (un seul par nom : le dernier enregistré remplace le précédent).
  * @param {string} action valeur de data-action

@@ -23,12 +23,21 @@ export function screenHtml() {
       <button type="button" class="contacts-mode-btn" data-action="mode" data-key="actifs">👥 Actifs <span data-count="actifs"></span></button>
       <button type="button" class="contacts-mode-btn" data-action="mode" data-key="archives">📦 Archivés <span data-count="archives"></span></button>
     </div>
+    <div class="group-mail-bar">
+      <select class="group-mail-select" id="group-mail-select" data-action="mail-group" data-on="change" aria-label="Groupe à écrire"></select>
+      <a class="group-mail-btn" id="group-mail-link" data-action="group-mail" href="#">✉️ Mail groupe</a>
+    </div>
     <div class="contacts-list" id="contacts-list"></div>
   </div>
   <button type="button" class="fab" data-action="add-swimmer" aria-label="Ajouter un nageur">+</button>
   <div class="modal-overlay" id="modal-contact" data-action="close-backdrop"><div class="contact-popup" role="dialog" aria-label="Fiche du nageur" id="contact-popup"></div></div>
   <div class="modal-overlay" id="modal-swimmer" data-action="close-backdrop"><div class="modal-sheet" role="dialog" aria-label="Nageur" id="swimmer-sheet"></div></div>
   <div class="modal-overlay dialog" id="dialog-contact" data-action="close-backdrop"><div class="dialog-box" role="dialog" id="dialog-box"></div></div>`;
+}
+
+/** @param {object[]} groups @param {string} selected @returns {string} options du « Mail groupe » */
+export function mailOptionsHtml(groups, selected) {
+  return html`<option value="all"${selected === 'all' ? raw(' selected') : ''}>Tous les actifs</option>${groups.map((g) => raw(html`<option value="${g.id}"${g.id === selected ? raw(' selected') : ''}>${g.name}</option>`))}`;
 }
 
 /**
@@ -73,7 +82,7 @@ export function ficheHtml(sw) {
   if (sw.email) fields.push(['✉️', 'Email', sw.email]);
   fields.push(['🎂', 'Date de naissance', sw.dob ? formatDob(sw.dob) : 'Non renseignée']);
   if (age != null) fields.push(['🏅', 'Âge', `${age} ans`]);
-  const phone = (sw.phone || '').replace(/\s/g, '');
+  const phone = (sw.phone || '').replace(/[^\d+]/g, '');
   return html`<div class="modal-handle"></div>
     <div class="contact-popup-header">
       <button type="button" class="contact-popup-avatar" data-action="edit-swimmer" data-id="${sw.id}" aria-label="Changer la photo">${raw(avatarHtml(sw))}</button>
@@ -87,7 +96,7 @@ export function ficheHtml(sw) {
     </div>`))}</div>
     <div class="contact-action-btns">
       ${sw.phone ? raw(html`<a class="contact-action-btn btn-call" href="tel:${phone}">📞 Appeler</a>`) : ''}
-      ${sw.email ? raw(html`<a class="contact-action-btn btn-mail" href="mailto:${sw.email}">✉️ Email</a>`) : ''}
+      ${sw.email ? raw(html`<a class="contact-action-btn btn-mail" href="mailto:${encodeURIComponent(sw.email)}">✉️ Email</a>`) : ''}
     </div>
     <div class="contact-popup-actions">
       <button type="button" class="btn-full btn-ghost" data-action="edit-swimmer" data-id="${sw.id}">✏️ Modifier</button>

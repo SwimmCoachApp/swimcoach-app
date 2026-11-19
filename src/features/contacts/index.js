@@ -6,9 +6,10 @@ import { db, subscribe } from '../../core/store.js';
 import { currentSeason } from '../../core/season.js';
 import { photoUrl, resizeImage } from '../../core/photos.js';
 import {
-  listSwimmers, listGroups, countSwimmers, saveSwimmer, archiveSwimmer, restoreSwimmer, deleteSwimmer, addGroup, deleteGroup,
+  listSwimmers, listGroups, countSwimmers, saveSwimmer, archiveSwimmer, restoreSwimmer, deleteSwimmer, addGroup, deleteGroup, mailGroups, groupMail,
 } from './logic.js';
-import { screenHtml, listHtml, ficheHtml, formHtml, groupBlockHtml, deleteDialogHtml, archiveDialogHtml } from './view.js';
+import { currentTeamName } from '../../app/shell.js';
+import { screenHtml, listHtml, mailOptionsHtml, ficheHtml, formHtml, groupBlockHtml, deleteDialogHtml, archiveDialogHtml } from './view.js';
 
 const SEARCH_DELAY_MS = 150;
 const REOPEN_FICHE_MS = 350; // iOS PWA : laisser la feuille précédente se fermer
@@ -48,7 +49,20 @@ function refreshList() {
   hydratePhotos(list);
   const counts = countSwimmers();
   for (const key of ['actifs', 'archives']) ui.root.querySelector(`[data-count="${key}"]`).textContent = `(${counts[key]})`;
+  refreshMail();
   for (const btn of ui.root.querySelectorAll('.contacts-mode-btn')) btn.classList.toggle('active', btn.dataset.key === ui.filter);
+}
+
+/** Options du « Mail groupe » et lien prêt à ouvrir le client de messagerie. */
+function refreshMail() {
+  const select = el('group-mail-select');
+  const link = el('group-mail-link');
+  if (!select || !link) return;
+  const groups = mailGroups();
+  const keep = groups.some((g) => g.id === select.value) ? select.value : 'all';
+  select.innerHTML = mailOptionsHtml(groups, keep);
+  const { href } = groupMail(keep, currentTeamName());
+  link.setAttribute('href', href || '#');
 }
 
 function refreshGroupBlock() {
@@ -187,6 +201,16 @@ on('search', (input) => {
     refreshList();
   }, SEARCH_DELAY_MS);
 }, 'input');
+on('mail-group', refreshMail, 'change');
+on('group-mail', (link, ev) => {
+  const { count } = groupMail(el('group-mail-select').value, currentTeamName());
+  if (count === 0) {
+    ev.preventDefault();
+    toast(el('group-mail-select').value === 'all' ? 'Aucun nageur actif avec un email' : 'Aucun email dans ce groupe');
+    return;
+  }
+  toast(`${count} destinataire${count > 1 ? 's' : ''}`);
+});
 on('mode', (btn) => {
   if (btn.dataset.key === ui.filter) return;
   ui.filter = btn.dataset.key;
@@ -260,13 +284,13 @@ on('ask-delete', (btn) => {
 on('do-delete', async (btn) => {
   const id = btn.dataset.id;
   closeModal('dialog-contact');
-  closeModal('modal-swimmer');
-  closeModal('modal-contact');
   try {
     await deleteSwimmer(id);
+    closeModal('modal-swimmer');
+    closeModal('modal-contact');
     toast('Nageur supprimé');
-  } catch {
-    toast('La suppression de la photo nécessite une connexion');
+  } catch (e) {
+    toast(e?.photo && e.network ? 'La suppression de la photo nécessite une connexion' : 'Suppression impossible');
   }
 });
 on('ask-archive', (btn) => {

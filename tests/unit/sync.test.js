@@ -244,6 +244,18 @@ test("checkMembership sans le dernier espace → onTeamLost(null)", async () => 
   expect(onTeamLost).toHaveBeenCalledWith(null);
 });
 
+test('initialSync : onSynced n’est appelé qu’après une lecture complète des 7 tables', async () => {
+  const onSynced = vi.fn();
+  configureSync({ toast, onTeamLost, onSynced });
+  fake.client.failWith = (call) => (call.table === 'plan_events' ? networkError() : null);
+  expect(await initialSync()).toBe(false);
+  expect(onSynced).not.toHaveBeenCalled();
+  fake.client.failWith = null;
+  expect(await initialSync()).toBe(true);
+  expect(onSynced).toHaveBeenCalledTimes(1);
+  configureSync({ onSynced: () => {} });
+});
+
 test('initialSync : vérifie l’appartenance, charge les 7 tables puis envoie la file', async () => {
   fake.client.tables.groups = [{ id: 'g1', team_id: 'T1' }];
   fake.client.tables.plan_weeks = [{ week_key: '2026-W47', team_id: 'T1' }];

@@ -26,3 +26,22 @@ test('un champ data-on="change" arrête la remontée : le clic ne déclenche pas
   document.getElementById('s').dispatchEvent(new Event('change', { bubbles: true }));
   expect(pick).toHaveBeenCalledTimes(1);
 });
+
+test('role="button" avec data-action s’active à Entrée et Espace, pas pour les autres touches', () => {
+  const fn = vi.fn();
+  on('t-key', fn);
+  document.body.innerHTML = '<div id="r" role="button" tabindex="0" data-action="t-key"></div>';
+  const r = document.getElementById('r');
+  r.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  r.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  r.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+  expect(fn).toHaveBeenCalledTimes(2);
+});
+
+test('un vrai bouton n’est pas déclenché deux fois par le clavier', () => {
+  const fn = vi.fn();
+  on('t-key2', fn);
+  document.body.innerHTML = '<button id="b" data-action="t-key2"></button>';
+  document.getElementById('b').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(fn).not.toHaveBeenCalled();
+});

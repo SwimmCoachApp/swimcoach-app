@@ -242,6 +242,7 @@ test('création d’un espace : les groupes par défaut sont créés une seule f
   await page.getByRole('button', { name: 'Créer' }).click();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
   const names = () => fake.state.tables.groups.map((g) => g.name);
+  await expect.poll(names).toHaveLength(6);
   expect(names()).toEqual(['Benjamins', 'École de natation', 'Loisirs', 'Pôle Formation 1', 'Compétition', 'Autre']);
   expect(fake.state.tables.groups.map((g) => g.sort_order)).toEqual([0, 1, 2, 3, 4, 5]);
   await page.reload();
@@ -252,7 +253,7 @@ test('création d’un espace : les groupes par défaut sont créés une seule f
   expect(names()).toHaveLength(6);
 });
 
-test('un espace reçu par invitation n’en reçoit pas de groupes à l’arrivée', async ({ page }) => {
+test('espace sans groupe ouvert par un invité : les groupes par défaut arrivent une fois ; avec un groupe, rien n’est créé', async ({ page }) => {
   const fake = await installFakeSupabase(page, {
     users: [{ email: 'invite@toac.fr', password: 'motdepasse-long', activated: true }],
     teams: [{ id: T1, name: 'Chez le collègue' }],
@@ -263,7 +264,82 @@ test('un espace reçu par invitation n’en reçoit pas de groupes à l’arriv�
   await page.getByLabel('Mot de passe').fill('motdepasse-long');
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
-  expect(fake.state.tables.groups).toHaveLength(0);
+  await expect.poll(() => fake.state.tables.groups.length).toBe(6);
+  await page.reload();
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await page.waitForTimeout(600);
+  expect(fake.state.tables.groups).toHaveLength(6);
+});
+
+test('espace qui a déjà un groupe : aucun groupe par défaut', async ({ page }) => {
+  const fake = await open(page);
+  await page.waitForTimeout(600);
+  expect(fake.state.tables.groups.map((g) => g.name)).toEqual(['Benjamins', 'Loisirs']);
+  expect(fake.callsTo('/rest/v1/groups').filter((c) => c.method === 'POST')).toHaveLength(0);
+});
+
+test('Mail groupe : adresses valides des actifs du groupe, encodées, en copie cachée', async ({ page }) => {
+  const sw = (n, group_id, email, left_season = null) => ({
+    id: `0000000${n}-0000-4000-8000-00000000000${n}`, team_id: T1, firstname: `N${n}`, lastname: 'X', group_id, email, joined_season: 2024, left_season,
+  });
+  await open(page, {
+    swimmers: [sw(1, G1, 'a+b@toac.fr'), sw(2, G1, ''), sw(3, G1, 'pas-un-mail'), sw(4, G1, 'archive@toac.fr', 2025), sw(5, G2, 'c@toac.fr'), sw(6, G1, 'd@toac.fr')],
+  });
+  const link = page.locator('#group-mail-link');
+  await expect(link).toHaveAttribute('href', `mailto:?bcc=${encodeURIComponent('a+b@toac.fr')},c%40toac.fr,d%40toac.fr&subject=${encodeURIComponent('Message de TOAC Natation')}`);
+  await expect(page.locator('#group-mail-select option')).toHaveText(['Tous les actifs', 'Benjamins', 'Loisirs']);
+  await page.locator('#group-mail-select').selectOption({ label: 'Benjamins' });
+  await expect(link).toHaveAttribute('href', `mailto:?bcc=a%2Bb%40toac.fr,d%40toac.fr&subject=${encodeURIComponent('[Benjamins] Message de TOAC Natation')}`);
+});
+
+test('Mail groupe sans adresse : message, pas de navigation', async ({ page }) => {
+  await open(page, { swimmers: [{ id: '00000001-0000-4000-8000-000000000001', team_id: T1, firstname: 'Sans', lastname: 'Mail', group_id: G1, joined_season: 2025, left_season: null }] });
+  await page.locator('#group-mail-link').click();
+  await expect(page.getByText('Aucun nageur actif avec un email')).toBeVisible();
+  expect(page.url()).not.toContain('mailto');
+});
+
+test('clavier : Entrée et Espace ouvrent la fiche depuis la ligne', async ({ page }) => {
+  await open(page, { swimmers: [{ id: '00000001-0000-4000-8000-000000000001', team_id: T1, firstname: 'Clara', lastname: 'Key', group_id: G1, joined_season: 2025, left_season: null }] });
+  const row = page.locator('.contact-row');
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#modal-contact')).toHaveClass(/open/);
+  await page.getByRole('button', { name: 'Fermer' }).first().click();
+  await expect(page.locator('#modal-contact')).not.toHaveClass(/open/);
+  await row.focus();
+  await page.keyboard.press(' ');
+  await expect(page.locator('#modal-contact')).toHaveClass(/open/);
+});
+
+test('fiche avec photo : la photo remplit le cercle (captures clair et sombre) ; liens mailto et tel encodés', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await open(page);
+  await addSwimmer(page, { firstname: 'Léa', lastname: 'Martin', group: 'Benjamins', photo: await bigPng(page, 600, 800) });
+  await page.locator('.contact-row', { hasText: 'Léa' }).click();
+  await page.locator('#modal-contact').getByRole('button', { name: /Modifier$/ }).click();
+  await expect(page.locator('#modal-swimmer')).toHaveClass(/open/);
+  await expect(page.locator('#swimmer-sheet .modal-title')).toHaveText('Modifier nageur');
+  await page.getByLabel('Téléphone').fill('06 12.34-56 78');
+  await page.getByLabel('Email').fill('a+b@toac.fr');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.locator('.btn-mail')).toBeVisible(); // la fiche s'est rouverte avec les nouvelles valeurs
+  const avatar = page.locator('.contact-popup-avatar img');
+  await expect(avatar).toBeVisible();
+  await expect.poll(() => avatar.evaluate((i) => i.naturalWidth)).toBeGreaterThan(0);
+  const box = await avatar.boundingBox();
+  const frame = await page.locator('.contact-popup-avatar').boundingBox();
+  expect(Math.abs(box.width - (frame.width - 6))).toBeLessThan(2); // bordure de 3 px
+  expect(Math.abs(box.height - (frame.height - 6))).toBeLessThan(2);
+  await expect(page.locator('.btn-mail')).toHaveAttribute('href', 'mailto:a%2Bb%40toac.fr');
+  await expect(page.locator('.btn-call')).toHaveAttribute('href', 'tel:0612345678');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: 'test-results/contacts-fiche-photo-dark.png' });
+  await page.getByRole('button', { name: 'Fermer' }).first().click();
+  await page.getByRole('button', { name: 'Changer de thème' }).click();
+  await page.locator('.contact-row', { hasText: 'Léa' }).click();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: 'test-results/contacts-fiche-photo-light.png' });
 });
 
 test('la capture de la liste et de la fiche (sombre et clair)', async ({ page }) => {
