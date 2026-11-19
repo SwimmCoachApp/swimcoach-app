@@ -81,6 +81,22 @@ export function saveCache() {
   }, SAVE_DELAY_MS);
 }
 
+/** Écrit tout de suite la sauvegarde du cache en attente, s'il y en a une. */
+export function saveCacheNow() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (ctx) writeCache(ctx);
+}
+
+// L'app peut être tuée sans prévenir une fois masquée : on ne garde pas d'écriture en suspens.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', saveCacheNow);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveCacheNow();
+  });
+}
+
 /**
  * Ajoute ou remplace une ligne locale ; pose le `team_id` de l'espace ouvert.
  * @param {string} table

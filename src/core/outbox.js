@@ -1,13 +1,15 @@
 /**
  * File d'attente des écritures vers Supabase.
  *
- * Chaque espace a sa file, persistée tout de suite dans `teamStore(coachId, teamId).set('outbox')` ;
- * la liste des espaces dont la file n'est pas vide est tenue dans `coachStore(coachId).set('outboxTeams')`.
+ * Chaque espace a sa file, persistée tout de suite dans `teamStore(coachId, teamId).set('outbox')`,
+ * et sa liste des refus définitifs dans `outbox_rejected` (`[{op, error: {code, status, message}, at}]`) :
+ * une op refusée n'est jamais perdue et ne bloque jamais la file. `coachStore(coachId).set('outboxTeams')`
+ * liste les espaces dont l'une des deux listes n'est pas vide (clé retirée quand il n'y en a plus).
  * Chaque op porte le `coachId` et le `teamId` du moment ; `flush` n'envoie que celles de
  * l'entraîneur et de l'espace visés.
  */
 import { teamStore, coachStore } from './storage.js';
-import { getContext } from './store.js';
+import { getContext, keyOf } from './store.js';
 import { getCoach } from './session.js';
 
 /** Colonnes de conflit de l'upsert, par table. */
@@ -18,48 +20,68 @@ export const ON_CONFLICT = {
   presence: 'session_id,swimmer_id',
   plan_weeks: 'team_id,week_key',
   plan_events: 'id',
+  // Sur conflit, l'upsert peut réécrire `id` avec celui du client : rien ne référence performances.id.
   performances: 'team_id,swimmer_id,competition_id,event_code,phase',
 };
 
 let handlers = {
-  /** Refus RLS : renvoie true si l'entraîneur est toujours membre de l'espace. */
-  forbidden: async () => true,
-  /** Op refusée définitivement par le serveur (retirée de la file). */
+  /** Refus RLS : 'member' (op mise de côté), 'removed' (espace effacé), 'unknown' (on garde et on s'arrête). */
+  forbidden: async () => 'unknown',
+  /** Op refusée définitivement et mise de côté ; `total` = nombre de refus de cet espace. */
   rejected: () => {},
 };
 const running = new Map();
+/** Compteur par table, augmenté à chaque op retirée de la file (envoyée ou mise de côté). */
+const epochs = new Map();
 
 /**
  * Branche les réactions aux refus du serveur (fait par sync.js).
- * @param {{forbidden?: (op: object) => Promise<boolean>, rejected?: (op: object, error: object) => void}} deps
+ * @param {{forbidden?: (op: object) => Promise<'member'|'removed'|'unknown'>, rejected?: (op: object, error: object, total: number) => void}} deps
  */
 export function configureOutbox(deps = {}) {
   handlers = { ...handlers, ...deps };
 }
 
-const readOps = (coachId, teamId) => {
-  const ops = teamStore(coachId, teamId).get('outbox');
-  return Array.isArray(ops) ? ops : [];
-};
-
-function writeOps(coachId, teamId, ops) {
-  const store = coachStore(coachId);
-  const teams = new Set(store.get('outboxTeams') ?? []);
-  if (ops.length) {
-    teamStore(coachId, teamId).set('outbox', ops);
-    teams.add(teamId);
-  } else {
-    teamStore(coachId, teamId).remove('outbox');
-    teams.delete(teamId);
-  }
-  store.set('outboxTeams', [...teams]);
+/**
+ * Change dès qu'une op de la table quitte une file : une lecture commencée avant ne reflète
+ * peut-être pas cette écriture.
+ * @param {string} table
+ * @returns {number}
+ */
+export function flushEpoch(table) {
+  return epochs.get(table) ?? 0;
 }
+
+const bump = (table) => epochs.set(table, flushEpoch(table) + 1);
+
+const readList = (coachId, teamId, name) => {
+  const list = teamStore(coachId, teamId).get(name);
+  return Array.isArray(list) ? list : [];
+};
+const readOps = (coachId, teamId) => readList(coachId, teamId, 'outbox');
+const readRejected = (coachId, teamId) => readList(coachId, teamId, 'outbox_rejected');
+
+function writeList(coachId, teamId, name, list) {
+  if (list.length) teamStore(coachId, teamId).set(name, list);
+  else teamStore(coachId, teamId).remove(name);
+  const store = coachStore(coachId);
+  const before = store.get('outboxTeams') ?? [];
+  const teams = new Set(before);
+  if (readOps(coachId, teamId).length || readRejected(coachId, teamId).length) teams.add(teamId);
+  else teams.delete(teamId);
+  if (teams.size === before.length && before.every((t) => teams.has(t))) return;
+  if (teams.size) store.set('outboxTeams', [...teams]);
+  else store.remove('outboxTeams');
+}
+
+const teamsOf = (coachId, teamId) => (teamId ? [teamId] : coachStore(coachId).get('outboxTeams') ?? []);
 
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /**
  * Ajoute une écriture à la file de l'espace ouvert.
- * @param {{table: string, kind: 'upsert'|'delete', key: string, row?: object}} op
+ * La clé d'un upsert est dérivée de la ligne (`keyOf`) ; une `key` fournie doit lui être égale.
+ * @param {{table: string, kind: 'upsert'|'delete', key?: string, row?: object}} op
  * @throws {Error} si aucun espace n'est ouvert ou si l'op est invalide
  */
 export function enqueue(op) {
@@ -69,24 +91,39 @@ export function enqueue(op) {
   if (op.kind !== 'upsert' && op.kind !== 'delete') throw new Error(`Opération inconnue : ${op.kind}`);
   if (op.kind === 'upsert' && !op.row) throw new Error('Upsert sans ligne');
   const entry = { id: newId(), table: op.table, kind: op.kind, key: op.key, coachId: ctx.coachId, teamId: ctx.teamId };
-  if (op.kind === 'upsert') entry.row = { ...op.row, team_id: ctx.teamId };
-  writeOps(ctx.coachId, ctx.teamId, [...readOps(ctx.coachId, ctx.teamId), entry]);
+  if (op.kind === 'upsert') {
+    entry.row = { ...op.row, team_id: ctx.teamId };
+    entry.key = keyOf(op.table, entry.row);
+    if (op.key !== undefined && op.key !== entry.key) throw new Error(`Clé ${op.key} différente de celle de la ligne (${entry.key})`);
+  }
+  if (entry.key === undefined || entry.key === null) throw new Error('Op sans clé');
+  writeList(ctx.coachId, ctx.teamId, 'outbox', [...readOps(ctx.coachId, ctx.teamId), entry]);
 }
 
 /**
- * Nombre d'écritures en attente.
+ * Nombre d'écritures en attente (hors refus définitifs).
  * @param {string} [teamId] un espace ; tous les espaces de l'entraîneur si absent
  * @param {string} [coachId] par défaut l'entraîneur connecté
  * @returns {number}
  */
 export function pendingCount(teamId, coachId = getCoach()?.id) {
   if (!coachId) return 0;
-  const teams = teamId ? [teamId] : coachStore(coachId).get('outboxTeams') ?? [];
-  return teams.reduce((n, t) => n + readOps(coachId, t).length, 0);
+  return teamsOf(coachId, teamId).reduce((n, t) => n + readOps(coachId, t).length, 0);
 }
 
 /**
- * Clés en attente d'envoi pour une table de l'espace ouvert.
+ * Nombre d'écritures refusées définitivement par le serveur et mises de côté.
+ * @param {string} [teamId] un espace ; tous les espaces de l'entraîneur si absent
+ * @param {string} [coachId] par défaut l'entraîneur connecté
+ * @returns {number}
+ */
+export function rejectedCount(teamId, coachId = getCoach()?.id) {
+  if (!coachId) return 0;
+  return teamsOf(coachId, teamId).reduce((n, t) => n + readRejected(coachId, t).length, 0);
+}
+
+/**
+ * Clés en attente d'envoi pour une table de l'espace ouvert (hors refus définitifs).
  * @param {string} table
  * @returns {Set<string>}
  */
@@ -97,12 +134,13 @@ export function pendingKeys(table) {
 }
 
 /**
- * Efface la file d'un espace.
+ * Efface la file et les refus d'un espace.
  * @param {string} coachId
  * @param {string} teamId
  */
 export function dropTeam(coachId, teamId) {
-  writeOps(coachId, teamId, []);
+  writeList(coachId, teamId, 'outbox', []);
+  writeList(coachId, teamId, 'outbox_rejected', []);
 }
 
 function send(client, op) {
@@ -117,19 +155,33 @@ function send(client, op) {
   return del.eq('team_id', op.teamId).eq('id', op.key);
 }
 
-/** Erreur passagère (réseau, serveur, jeton expiré, trop de requêtes) : on réessaiera plus tard. */
+/**
+ * Erreur temporaire, l'op est gardée pour plus tard : réseau, serveur, jeton expiré, trop de requêtes,
+ * base en lecture seule (25006 / 405), cache du schéma ou colonnes pas encore à jour (PGRST0xx, PGRST2xx).
+ */
 function isTransient(error, status) {
-  if (!error?.code || !status) return true;
-  return status >= 500 || status === 401 || status === 408 || status === 429;
+  const code = String(error?.code ?? '');
+  if (!code || !status) return true;
+  if (code === '25006' || /^PGRST[02]\d\d$/.test(code)) return true;
+  return status >= 500 || [401, 405, 408, 429].includes(status);
 }
 
-function removeOp(coachId, teamId, id) {
-  writeOps(coachId, teamId, readOps(coachId, teamId).filter((o) => o.id !== id));
+function removeOp(coachId, teamId, op) {
+  writeList(coachId, teamId, 'outbox', readOps(coachId, teamId).filter((o) => o.id !== op.id));
+  bump(op.table);
+}
+
+function reject(coachId, teamId, op, error, status) {
+  const entry = { op, error: { code: String(error?.code ?? ''), status: status ?? 0, message: String(error?.message ?? '') }, at: new Date().toISOString() };
+  writeList(coachId, teamId, 'outbox_rejected', [...readRejected(coachId, teamId), entry]);
+  removeOp(coachId, teamId, op);
+  handlers.rejected(op, entry.error, readRejected(coachId, teamId).length);
 }
 
 async function run(client, coachId, teamId) {
   const sent = new Set();
   for (;;) {
+    if (getCoach()?.id !== coachId) return; // l'entraîneur a changé : rien ne part sous un autre jeton
     const op = readOps(coachId, teamId).find((o) => o.coachId === coachId && o.teamId === teamId && !sent.has(o.id));
     if (!op) return;
     sent.add(op.id);
@@ -140,24 +192,23 @@ async function run(client, coachId, teamId) {
       res = { error, status: 0 };
     }
     if (!res?.error) {
-      removeOp(coachId, teamId, op.id);
+      removeOp(coachId, teamId, op);
       continue;
     }
     if (res.error.code === '42501') {
-      if (!(await handlers.forbidden(op))) return; // plus membre : la file de l'espace a été effacée
-      removeOp(coachId, teamId, op.id);
-      handlers.rejected(op, res.error);
+      const membership = await handlers.forbidden(op);
+      if (membership !== 'member') return; // 'removed' : file effacée ; 'unknown' : on garde l'op
+      reject(coachId, teamId, op, res.error, res.status);
       continue;
     }
     if (isTransient(res.error, res.status)) return;
-    removeOp(coachId, teamId, op.id);
-    handlers.rejected(op, res.error);
+    reject(coachId, teamId, op, res.error, res.status);
   }
 }
 
 /**
  * Envoie dans l'ordre les écritures de l'entraîneur pour l'espace visé.
- * S'arrête à la première erreur réseau ; une op refusée définitivement est retirée.
+ * S'arrête à la première erreur temporaire ; une op refusée définitivement est mise de côté.
  * Un seul envoi à la fois par espace : un appel pendant un envoi attend celui-ci.
  * @param {object} client client Supabase
  * @param {string} coachId entraîneur connecté

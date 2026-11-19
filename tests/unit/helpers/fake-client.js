@@ -11,6 +11,10 @@ export function makeFakeClient(tables = {}) {
     channels,
     /** @type {null | ((call: object) => object|null|undefined)} */
     failWith: null,
+    /** @type {null | ((call: object) => boolean)} lecture retenue : instantané pris tout de suite, livré par release() */
+    hold: null,
+    /** @type {{call: object, release: () => void}[]} */
+    held: [],
     from: (table) => builder(table),
     channel(name) {
       const ch = {
@@ -51,7 +55,13 @@ export function makeFakeClient(tables = {}) {
       range(from, to) { call.range = [from, to]; return b; },
       upsert(row, options) { call.op = 'upsert'; call.row = row; call.options = options; return b; },
       delete() { call.op = 'delete'; return b; },
-      then(resolve, reject) { return Promise.resolve().then(() => run(call)).then(resolve, reject); },
+      then(resolve, reject) {
+        if (call.op === 'select' && client.hold?.(call)) {
+          const result = run(call);
+          return new Promise((r) => client.held.push({ call, release: () => r(result) })).then(resolve, reject);
+        }
+        return Promise.resolve().then(() => run(call)).then(resolve, reject);
+      },
     };
     return b;
   }
@@ -89,3 +99,5 @@ export function makeFakeClient(tables = {}) {
 export const networkError = () => ({ message: 'TypeError: Failed to fetch', details: '', hint: '', code: '', status: 0 });
 /** Refus RLS. */
 export const rlsError = () => ({ message: 'new row violates row-level security policy', code: '42501', status: 403 });
+/** Erreur Postgres définitive (contrainte, etc.). */
+export const pgError = (code, status = 409) => ({ message: `pg ${code}`, code, status });

@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { makeFakeClient, networkError, rlsError } from './helpers/fake-client.js';
+import { makeFakeClient, networkError, rlsError, pgError } from './helpers/fake-client.js';
 import { teamStore } from '../../src/core/storage.js';
 
 const fake = { client: makeFakeClient() };
@@ -23,7 +23,7 @@ vi.mock('../../src/core/teams.js', () => ({
 const { fetchAll, mergeTable, checkMembership, initialSync, startLive, stopLive, openTeam, closeTeam, configureSync, LIVE_DELAY_MS } =
   await import('../../src/core/sync.js');
 const { db, loadCache, resetStore, upsertLocal, subscribe } = await import('../../src/core/store.js');
-const { enqueue, flush, pendingCount } = await import('../../src/core/outbox.js');
+const { enqueue, flush, pendingCount, rejectedCount } = await import('../../src/core/outbox.js');
 
 const toast = vi.fn();
 const onTeamLost = vi.fn();
@@ -125,13 +125,100 @@ test('42501 alors que je suis toujours membre : l’op refusée est retirée, la
   await flush(fake.client, 'A', 'T1');
   expect(fake.client.calls.map((c) => c.row.id)).toEqual(['x', 'y']);
   expect(pendingCount('T1')).toBe(0);
+  expect(rejectedCount('T1')).toBe(1);
   expect(onTeamLost).not.toHaveBeenCalled();
   expect(toast).toHaveBeenCalledTimes(1);
+  expect(toast).toHaveBeenCalledWith('1 modification(s) refusée(s) par le serveur');
+});
+
+test('42501 alors que l’appartenance est inconnue (liste illisible) : la file s’arrête, l’op est gardée', async () => {
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'x', row: { id: 'x' } });
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'y', row: { id: 'y' } });
+  listMyTeams.mockRejectedValueOnce(new Error('offline'));
+  fake.client.failWith = () => rlsError();
+  await flush(fake.client, 'A', 'T1');
+  expect(fake.client.calls).toHaveLength(1);
+  expect(pendingCount('T1')).toBe(2);
+  expect(rejectedCount('T1')).toBe(0);
+  expect(onTeamLost).not.toHaveBeenCalled();
+});
+
+test('refus définitifs : le toast donne le nombre total de modifications refusées', async () => {
+  enqueue({ table: 'groups', kind: 'upsert', key: 'g1', row: { id: 'g1' } });
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'w1', row: { id: 'w1' } });
+  fake.client.failWith = () => pgError('23503');
+  await flush(fake.client, 'A', 'T1');
+  expect(toast).toHaveBeenLastCalledWith('2 modification(s) refusée(s) par le serveur');
+});
+
+test('relecture tardive : une page lue avant notre écriture ne la défait pas, une nouvelle relecture est programmée', async () => {
+  vi.useFakeTimers();
+  startLive();
+  const ch = fake.client.channels.at(-1);
+  fake.client.tables.presence = [{ session_id: 's1', swimmer_id: 'w1', team_id: 'T1', status: 'P' }];
+  upsertLocal('presence', { session_id: 's1', swimmer_id: 'w1', status: 'A' });
+  enqueue({ table: 'presence', kind: 'upsert', row: db.presence.get('s1:w1') });
+  fake.client.hold = (call) => call.table === 'presence';
+  ch.emit('presence', 'UPDATE');
+  await vi.advanceTimersByTimeAsync(LIVE_DELAY_MS);
+  expect(fake.client.held).toHaveLength(1); // instantané pris avant l'écriture : status P
+  await flush(fake.client, 'A', 'T1');
+  expect(pendingCount('T1')).toBe(0);
+  fake.client.hold = null;
+  fake.client.held[0].release();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(db.presence.get('s1:w1').status).toBe('A');
+  const selects = () => fake.client.calls.filter((c) => c.op === 'select').length;
+  expect(selects()).toBe(1);
+  await vi.advanceTimersByTimeAsync(LIVE_DELAY_MS);
+  expect(selects()).toBe(2);
+  expect(db.presence.get('s1:w1').status).toBe('A');
+});
+
+test('relectures dans le désordre : la plus récente gagne', async () => {
+  vi.useFakeTimers();
+  startLive();
+  const ch = fake.client.channels.at(-1);
+  fake.client.hold = () => true;
+  fake.client.tables.swimmers = [{ id: 'w1', team_id: 'T1', name: 'v1' }];
+  ch.emit('swimmers', 'UPDATE');
+  await vi.advanceTimersByTimeAsync(LIVE_DELAY_MS);
+  fake.client.tables.swimmers = [{ id: 'w1', team_id: 'T1', name: 'v2' }];
+  ch.emit('swimmers', 'UPDATE');
+  await vi.advanceTimersByTimeAsync(LIVE_DELAY_MS);
+  expect(fake.client.held).toHaveLength(2);
+  fake.client.held[1].release();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(db.swimmers.get('w1').name).toBe('v2');
+  fake.client.held[0].release();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(db.swimmers.get('w1').name).toBe('v2');
+});
+
+test('le cache en attente est écrit tout de suite à pagehide et quand la page passe en arrière-plan', () => {
+  vi.useFakeTimers();
+  upsertLocal('groups', { id: 'g1' });
+  expect(teamStore('A', 'T1').get('cache')).toBeNull();
+  window.dispatchEvent(new Event('pagehide'));
+  expect(teamStore('A', 'T1').get('cache').groups).toHaveLength(1);
+  upsertLocal('groups', { id: 'g2' });
+  Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+  delete document.visibilityState;
+  expect(teamStore('A', 'T1').get('cache').groups).toHaveLength(2);
+});
+
+test("checkMembership : 'member', 'unknown' si la liste est illisible", async () => {
+  expect(await checkMembership()).toBe('member');
+  listMyTeams.mockRejectedValueOnce(new Error('offline'));
+  expect(await checkMembership()).toBe('unknown');
+  expect(db.groups).toBeDefined();
+  expect(onTeamLost).not.toHaveBeenCalled();
 });
 
 test("checkMembership sans le dernier espace → onTeamLost(null)", async () => {
   myTeams = [];
-  expect(await checkMembership()).toBe(false);
+  expect(await checkMembership()).toBe('removed');
   expect(onTeamLost).toHaveBeenCalledWith(null);
 });
 

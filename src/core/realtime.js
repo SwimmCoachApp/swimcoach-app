@@ -11,7 +11,7 @@
 import { supabase } from './supabase.js';
 import { TABLES, getContext, isOpen } from './store.js';
 import { flush } from './outbox.js';
-import { fetchAll, mergeTable, checkMembership, initialSync } from './sync.js';
+import { refreshTable, checkMembership, initialSync } from './sync.js';
 
 /** Délai entre un événement et la relecture de la table. */
 export const LIVE_DELAY_MS = 800;
@@ -20,15 +20,19 @@ export const LIVE_DELAY_MS = 800;
 let live = null;
 
 async function refresh(table, ctx) {
+  if (live?.ctx !== ctx || !isOpen(ctx)) return;
   try {
-    const rows = await fetchAll(table, ctx.teamId);
-    if (live?.ctx === ctx && isOpen(ctx)) mergeTable(table, rows);
+    await refreshTable(table, ctx);
   } catch {
     // hors ligne : la prochaine synchro rattrapera
   }
 }
 
-function schedule(table) {
+/**
+ * Programme (ou repousse) une relecture de la table dans 800 ms. Sans effet hors temps réel.
+ * @param {string} table
+ */
+export function scheduleRefresh(table) {
   if (!live) return;
   const state = live;
   clearTimeout(state.timers[table]);
@@ -69,7 +73,7 @@ export function startLive() {
   const channel = supabase.channel(`team-${ctx.teamId}`);
   const filter = `team_id=eq.${ctx.teamId}`;
   for (const table of TABLES) {
-    const handleChange = () => schedule(table);
+    const handleChange = () => scheduleRefresh(table);
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, handleChange);
     channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter }, handleChange);
     channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table }, handleChange);

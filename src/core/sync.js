@@ -10,8 +10,8 @@ import { teamStore } from './storage.js';
 import { getCoach, onCoachChange } from './session.js';
 import { listMyTeams, getCurrentTeam, setCurrentTeam } from './teams.js';
 import { TABLES, db, keyOf, getContext, isOpen, loadCache, replaceTable, resetStore } from './store.js';
-import { configureOutbox, dropTeam, flush, pendingKeys } from './outbox.js';
-import { startLive, stopLive } from './realtime.js';
+import { configureOutbox, dropTeam, flush, flushEpoch, pendingKeys } from './outbox.js';
+import { startLive, stopLive, scheduleRefresh } from './realtime.js';
 
 export { startLive, stopLive, LIVE_DELAY_MS } from './realtime.js';
 
@@ -25,6 +25,9 @@ let hooks = { toast: () => {}, onTeamLost: () => {} };
 /** @type {{coachId: string, team: {id: string, name: string}}|null} */
 let current = null;
 const checks = new Map();
+/** Par table : dernier numéro de relecture lancé, et dernier appliqué. */
+const started = new Map();
+const applied = new Map();
 
 /**
  * Branche l'interface.
@@ -38,7 +41,7 @@ export function configureSync(deps = {}) {
 
 configureOutbox({
   forbidden: (op) => verifyMembership(op.coachId, op.teamId),
-  rejected: () => hooks.toast("Une modification a été refusée par le serveur et n'a pas été enregistrée"),
+  rejected: (_op, _error, total) => hooks.toast(`${total} modification(s) refusée(s) par le serveur`),
 });
 
 onCoachChange((coach) => {
@@ -85,6 +88,31 @@ export function mergeTable(table, remoteRows) {
   replaceTable(table, next);
 }
 
+/**
+ * Relit une table et la fusionne, dans l'ordre : une relecture plus ancienne qu'une relecture déjà
+ * appliquée est ignorée ; si une op de la table a quitté la file pendant la lecture, la page lue
+ * peut précéder notre écriture : on ne fusionne pas et une nouvelle relecture est programmée.
+ * @param {string} table
+ * @param {{coachId: string, teamId: string}} ctx espace pour lequel la lecture est lancée
+ * @returns {Promise<'merged'|'superseded'|'stale'|'closed'>}
+ * @throws {Error} si la lecture échoue
+ */
+export async function refreshTable(table, ctx) {
+  const seq = (started.get(table) ?? 0) + 1;
+  started.set(table, seq);
+  const epoch = flushEpoch(table);
+  const rows = await fetchAll(table, ctx.teamId);
+  if (!isOpen(ctx)) return 'closed';
+  if ((applied.get(table) ?? 0) > seq) return 'superseded';
+  if (flushEpoch(table) !== epoch) {
+    scheduleRefresh(table);
+    return 'stale';
+  }
+  applied.set(table, seq);
+  mergeTable(table, rows);
+  return 'merged';
+}
+
 function teamName(teamId) {
   if (current?.team.id === teamId) return current.team.name;
   const team = getCurrentTeam();
@@ -93,16 +121,16 @@ function teamName(teamId) {
 
 async function runMembership(coachId, teamId) {
   const coach = getCoach();
-  if (!coach || coach.id !== coachId) return false;
+  if (!coach || coach.id !== coachId) return 'unknown';
   const name = teamName(teamId);
   let teams;
   try {
     teams = await listMyTeams();
   } catch {
-    return true; // inconnu : on ne retire rien
+    return 'unknown'; // liste illisible : on ne retire rien
   }
-  if (getCoach()?.id !== coachId) return false;
-  if (teams.some((t) => t.id === teamId)) return true;
+  if (getCoach()?.id !== coachId) return 'unknown';
+  if (teams.some((t) => t.id === teamId)) return 'member';
   const wasOpen = isOpen({ coachId, teamId });
   if (wasOpen) closeTeam();
   dropTeam(coachId, teamId);
@@ -113,7 +141,7 @@ async function runMembership(coachId, teamId) {
     if (next) setCurrentTeam(next.id);
     hooks.onTeamLost(next);
   }
-  return false;
+  return 'removed';
 }
 
 /** Vérifie l'appartenance à un espace (appels simultanés regroupés). */
@@ -127,26 +155,25 @@ function verifyMembership(coachId, teamId) {
  * Relit les espaces de l'entraîneur ; si l'espace ouvert n'y est plus, efface sa file et son cache,
  * affiche le toast et passe à un autre espace (ou à l'écran « Crée ton espace »).
  * Hors ligne, la dernière liste connue fait foi (rien n'est retiré).
- * @returns {Promise<boolean>} true si l'entraîneur est toujours membre de l'espace ouvert
+ * @returns {Promise<'member'|'removed'|'unknown'>} 'unknown' : aucun espace ouvert, entraîneur changé
+ *   ou liste des espaces illisible (rien n'est retiré)
  */
 export function checkMembership() {
   const ctx = getContext();
-  return ctx ? verifyMembership(ctx.coachId, ctx.teamId) : Promise.resolve(false);
+  return ctx ? verifyMembership(ctx.coachId, ctx.teamId) : Promise.resolve('unknown');
 }
 
 /**
  * Vérifie l'appartenance, recharge les 7 tables puis envoie la file d'attente.
- * @returns {Promise<boolean>} false si l'espace n'est plus accessible, a changé, ou si une lecture a échoué
+ * @returns {Promise<boolean>} false si l'appartenance n'est pas confirmée, si l'espace a changé ou si une lecture a échoué
  */
 export async function initialSync() {
   const ctx = getContext();
   if (!ctx) return false;
-  if (!(await checkMembership()) || !isOpen(ctx)) return false;
+  if ((await checkMembership()) !== 'member' || !isOpen(ctx)) return false;
   try {
     for (const table of TABLES) {
-      const rows = await fetchAll(table, ctx.teamId);
-      if (!isOpen(ctx)) return false;
-      mergeTable(table, rows);
+      if ((await refreshTable(table, ctx)) === 'closed') return false;
     }
     await flush(supabase, ctx.coachId, ctx.teamId);
   } catch {
