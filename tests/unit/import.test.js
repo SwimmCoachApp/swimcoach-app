@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { normalizeName } from '../../src/core/names.js';
-import { parseDob, tableToRows, parseCsv, parseImportFile, planImport, templateCsv, MAX_IMPORT_ROWS } from '../../src/features/contacts/import.js';
+import { parseDob, tableToRows, parseCsv, parseImportFile, planImport, groupsToCreate, templateCsv, MAX_IMPORT_ROWS } from '../../src/features/contacts/import.js';
 
 const fixture = (name) => resolve(process.cwd(), 'tests/fixtures', name);
 
@@ -33,6 +33,15 @@ describe('parseDob', () => {
   });
   test('un objet Date (cellule date lue par le lecteur Excel) garde son jour', () => {
     expect(parseDob(new Date(Date.UTC(2014, 8, 5)))).toBe('2014-09-05');
+  });
+  test('nombre hors plage plausible (téléphone, année seule) : null, jamais de date invalide', () => {
+    expect(parseDob(612345678)).toBeNull();
+    expect(parseDob('0612345678')).toBeNull();
+    expect(parseDob('2012')).toBeNull();
+    expect(parseDob(new Date().getFullYear() * 400)).toBeNull();
+    expect(parseDob(1e9)).toBeNull();
+    expect(parseDob(Number.NaN)).toBeNull();
+    expect(parseDob(Number.POSITIVE_INFINITY)).toBeNull();
   });
   test('vide ou illisible : null', () => {
     expect(parseDob('')).toBeNull();
@@ -116,7 +125,41 @@ describe('planImport', () => {
   });
 });
 
+describe('planImport : cas limites', () => {
+  const row = (lastname, firstname) => ({ firstname, lastname, dob: null, group: '', phone: '', email: '' });
+  test('sans prénom : invalide, ni créé ni doublon', () => {
+    const plan = planImport([row('Dupont', ''), row('Martin', 'Tom')], []);
+    expect(plan.invalid.map((r) => r.lastname)).toEqual(['Dupont']);
+    expect(plan.toCreate.map((r) => r.firstname)).toEqual(['Tom']);
+  });
+  test('noms sans lettres latines : pas de dédoublonnage entre eux', () => {
+    const plan = planImport([row('Петров', 'Иван'), row('Иванов', 'Олег')], []);
+    expect(plan.toCreate).toHaveLength(2);
+    expect(plan.duplicates).toEqual([]);
+  });
+});
+
+describe('groupsToCreate', () => {
+  test('groupe vide = Autre, comparaison sans accents ni casse, une seule fois', () => {
+    const rows = [{ group: '' }, { group: 'autre' }, { group: 'Élite' }, { group: 'elite' }, { group: 'Benjamins' }];
+    expect(groupsToCreate(rows, [{ name: 'benjamins' }])).toEqual(['Autre', 'Élite']);
+    expect(groupsToCreate(rows, [{ name: 'Autre' }, { name: 'ELITE' }, { name: 'Benjamins' }])).toEqual([]);
+  });
+});
+
 describe('modèle et fichiers', () => {
+  test('CSV Windows-1252 (Excel français) : accents lus correctement', async () => {
+    const bytes = readFileSync(fixture('nageurs-cp1252.csv'));
+    expect(bytes.includes(0xe9)).toBe(true); // vrai cp1252 : é = 0xE9
+    const { rows, errors } = await parseImportFile(new File([bytes], 'nageurs.csv', { type: 'text/csv' }));
+    expect(errors).toEqual([]);
+    expect(rows.map((r) => r.firstname)).toEqual(['Léa', 'Hélène']);
+    expect(rows[0].lastname).toBe('DUPONT');
+  });
+  test('CSV UTF-8 sans BOM avec accents : inchangé', async () => {
+    const { rows } = await parseImportFile(new File([Buffer.from('Nom;Prénom\nA;Hélène\n', 'utf8')], 'a.csv'));
+    expect(rows[0].firstname).toBe('Hélène');
+  });
   test('modèle CSV : BOM, séparateur ;, en-têtes reconnus par l\'import', () => {
     const csv = templateCsv();
     expect(csv.startsWith('﻿')).toBe(true);

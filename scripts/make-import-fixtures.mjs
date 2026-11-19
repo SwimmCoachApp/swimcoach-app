@@ -29,3 +29,6 @@ const csv = ['﻿' + HEADER.join(';'), ...[
   ['ROUX', 'Emma', '2013-07-21', 'emma.roux@example.org', '', ''],
 ].map((r) => r.join(';'))].join('\r\n') + '\r\n';
 writeFileSync(out('nageurs.csv'), csv);
+
+// Export « CSV (séparateur : point-virgule) » d'Excel français : Windows-1252, sans BOM.
+writeFileSync(out('nageurs-cp1252.csv'), Buffer.from('Nom;Prénom;Date de naissance;Groupe\r\nDUPONT;Léa;15/03/2012;Benjamins\r\nMARTIN;Hélène;05/09/2014;Loisirs\r\n', 'latin1'));

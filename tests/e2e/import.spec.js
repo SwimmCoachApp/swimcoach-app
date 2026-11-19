@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { currentSeason } from '../../src/core/season.js';
 import { installFakeSupabase } from './fake-supabase.js';
 
 const T1 = '55555555-5555-4555-8555-555555555555';
@@ -40,7 +41,7 @@ test('import .xlsx : aperçu (à créer, doublons, archivés ignorés) puis cré
 
   await expect(page.locator('#import-summary')).toHaveText('3 à créer, 1 doublons, 📦 1 archivés ignorés');
   await expect(page.locator('.import-preview-row')).toHaveCount(3);
-  await expect(page.locator('.import-note', { hasText: 'groupe sera créé' })).toContainText('Avenir');
+  await expect(page.locator('.import-note', { hasText: 'groupes seront créés' })).toContainText('Avenir, Autre');
   expect(fake.state.tables.swimmers).toHaveLength(2); // rien d'écrit avant confirmation
 
   await page.getByRole('button', { name: /Importer 3 nageurs/ }).click();
@@ -50,8 +51,11 @@ test('import .xlsx : aperçu (à créer, doublons, archivés ignorés) puis cré
   expect(created.map((s) => `${s.lastname} ${s.firstname}`).sort()).toEqual(['BERNARD Chloé', 'DUPONT Léa', 'ROUX Emma']);
   expect(created.find((s) => s.firstname === 'Léa')).toMatchObject({ dob: '2012-03-15', group_id: G1, email: 'lea.dupont@example.org', left_season: null });
   expect(created.find((s) => s.firstname === 'Chloé').dob).toBe('2023-03-15');
-  expect(created.find((s) => s.firstname === 'Emma')).toMatchObject({ dob: '2013-07-21', group_id: null });
-  expect(fake.state.tables.groups.map((g) => g.name).sort()).toEqual(['Avenir', 'Benjamins']);
+  const autreId = fake.state.tables.groups.find((g) => g.name === 'Autre')?.id;
+  expect(autreId).toBeTruthy();
+  expect(created.find((s) => s.firstname === 'Emma')).toMatchObject({ dob: '2013-07-21', group_id: autreId });
+  expect(fake.state.tables.groups.map((g) => g.name).sort()).toEqual(['Autre', 'Avenir', 'Benjamins']);
+  for (const s of created) expect(s.joined_season).toBe(currentSeason());
   const avenir = fake.state.tables.groups.find((g) => g.name === 'Avenir').id;
   expect(created.find((s) => s.firstname === 'Chloé').group_id).toBe(avenir);
   // l'archivé n'est pas recréé

@@ -61,11 +61,12 @@ export function parseDob(val) {
   if (val instanceof Date) {
     return Number.isNaN(val.getTime()) ? null : dateKey(val.getUTCFullYear(), val.getUTCMonth(), val.getUTCDate()); // le lecteur Excel date en UTC minuit
   }
-  if (typeof val === 'number' || /^\s*\d+(\.\d+)?\s*$/.test(String(val))) {
+  if (typeof val === 'number' || /^\s*[1-9]\d{4,5}\s*$/.test(String(val))) {
     const n = Math.floor(Number(val));
-    if (!(n >= 1) || n === 60) return null; // 60 : le 29/02/1900 que seul Excel connaît
+    if (!Number.isFinite(n) || n < 1 || n === 60) return null; // 60 : le 29/02/1900 que seul Excel connaît
     const d = new Date(Date.UTC(1899, 11, 30 + (n < 60 ? n + 1 : n)));
-    return dateKey(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const y = d.getUTCFullYear();
+    return y >= 1900 && y <= new Date().getFullYear() ? dateKey(y, d.getUTCMonth(), d.getUTCDate()) : null; // un téléphone n'est pas une date
   }
   const s = String(val).trim();
   let m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
@@ -160,12 +161,22 @@ export function loadExcelReader() {
   return readerPromise;
 }
 
-const readText = (file) => new Promise((resolve, reject) => {
+const readBytes = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result ?? ''));
+  reader.onload = () => resolve(reader.result);
   reader.onerror = () => reject(new Error('Impossible de lire le fichier CSV.'));
-  reader.readAsText(file, 'UTF-8');
+  reader.readAsArrayBuffer(file);
 });
+
+/** UTF-8 si valide, sinon Windows-1252 (« CSV (séparateur : point-virgule) » d'Excel français). */
+async function readText(file) {
+  const bytes = await readBytes(file);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+}
 
 /**
  * @param {File} file .xlsx ou .csv
@@ -188,33 +199,62 @@ export async function parseImportFile(file) {
   return tableToRows(table);
 }
 
-const keyOf = (r) => `${normalizeName(r.lastname)}|${normalizeName(r.firstname)}`;
+/** @returns {string|null} clé nom|prénom ; null si aucun des deux ne contient de lettre latine ou chiffre (pas de dédoublonnage) */
+const keyOf = (r) => {
+  const l = normalizeName(r.lastname);
+  const f = normalizeName(r.firstname);
+  return l || f ? `${l}|${f}` : null;
+};
 
 /**
  * @param {object[]} rows lignes du fichier
  * @param {{firstname: string, lastname?: string, left_season?: number|null}[]} existing tous les nageurs de l'espace (actifs et archivés)
- * @returns {{toCreate: object[], duplicates: object[], ignoredArchived: object[]}}
+ * @returns {{toCreate: object[], duplicates: object[], ignoredArchived: object[], invalid: object[]}}
  *   doublon : même nom qu'un nageur actif (ou déjà vu plus haut dans le fichier) ;
- *   ignoredArchived : même nom qu'un nageur archivé seulement, il n'est pas recréé
+ *   ignoredArchived : même nom qu'un nageur archivé seulement, il n'est pas recréé ;
+ *   invalid : sans prénom (saveSwimmer les refuserait)
  */
 export function planImport(rows, existing) {
   const active = new Set();
   const archived = new Set();
-  for (const sw of existing) (swimmerIsActive(sw) ? active : archived).add(keyOf(sw));
+  for (const sw of existing) {
+    const key = keyOf(sw);
+    if (key) (swimmerIsActive(sw) ? active : archived).add(key);
+  }
   const seen = new Set();
-  const plan = { toCreate: [], duplicates: [], ignoredArchived: [] };
+  const plan = { toCreate: [], duplicates: [], ignoredArchived: [], invalid: [] };
   for (const r of rows) {
+    if (!r.firstname.trim()) { plan.invalid.push(r); continue; }
     const key = keyOf(r);
-    if (active.has(key) || seen.has(key)) plan.duplicates.push(r);
-    else if (archived.has(key)) plan.ignoredArchived.push(r);
+    if (key && (active.has(key) || seen.has(key))) plan.duplicates.push(r);
+    else if (key && archived.has(key)) plan.ignoredArchived.push(r);
     else plan.toCreate.push(r);
-    seen.add(key);
+    if (key) seen.add(key);
   }
   return plan;
 }
 
+/** Groupe d'un nageur sans groupe dans le fichier (club4). */
+export const DEFAULT_GROUP = 'Autre';
+const groupOf = (r) => r.group.trim() || DEFAULT_GROUP;
+
 /**
- * Crée les nageurs du plan. Un groupe inconnu est créé une fois ; sans groupe dans le fichier : aucun groupe.
+ * @param {{group: string}[]} rows lignes qui seront créées
+ * @param {{name: string}[]} groups groupes de l'espace
+ * @returns {string[]} noms de groupes à créer (une fois chacun, comparaison sans accents ni casse)
+ */
+export function groupsToCreate(rows, groups) {
+  const known = new Set(groups.map((g) => fold(g.name)));
+  const out = new Map();
+  for (const r of rows) {
+    const name = groupOf(r);
+    if (!known.has(fold(name)) && !out.has(fold(name))) out.set(fold(name), name);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Crée les nageurs du plan. Un groupe inconnu est créé une fois ; sans groupe dans le fichier : « Autre » (club4).
  * @param {object[]} rows lignes à créer
  * @returns {Promise<{created: number, groupsCreated: number, failed: number}>}
  */
@@ -224,15 +264,12 @@ export async function runImport(rows) {
   let created = 0;
   let failed = 0;
   for (const r of rows) {
-    let group_id = null;
-    const name = r.group.trim();
-    if (name) {
-      if (!byName.has(fold(name))) {
-        const res = addGroup(name);
-        if (res.ok) { byName.set(fold(name), res.id); groupsCreated++; }
-      }
-      group_id = byName.get(fold(name)) ?? null;
+    const name = groupOf(r);
+    if (!byName.has(fold(name))) {
+      const res = addGroup(name);
+      if (res.ok) { byName.set(fold(name), res.id); groupsCreated++; }
     }
+    const group_id = byName.get(fold(name)) ?? null;
     try {
       await saveSwimmer({ firstname: r.firstname, lastname: r.lastname, dob: r.dob, group_id, phone: r.phone, email: r.email });
       created++;

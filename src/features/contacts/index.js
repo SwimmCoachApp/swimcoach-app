@@ -9,7 +9,7 @@ import {
   listSwimmers, listGroups, countSwimmers, saveSwimmer, archiveSwimmer, restoreSwimmer, deleteSwimmer, addGroup, deleteGroup, mailGroups, groupMail,
 } from './logic.js';
 import { currentTeamName } from '../../app/shell.js';
-import { parseImportFile, planImport, runImport, loadExcelReader, downloadTemplate } from './import.js';
+import { parseImportFile, planImport, runImport, loadExcelReader, downloadTemplate, groupsToCreate } from './import.js';
 import { screenHtml, importChooseHtml, importPreviewHtml, listHtml, mailOptionsHtml, ficheHtml, formHtml, groupBlockHtml, deleteDialogHtml, archiveDialogHtml } from './view.js';
 
 const SEARCH_DELAY_MS = 150;
@@ -324,6 +324,7 @@ const imp = { token: 0, plan: null, selected: new Set(), newGroups: [], warnings
 function renderImport() {
   const sheet = el('import-sheet');
   if (!sheet) return;
+  if (imp.plan) imp.newGroups = groupsToCreate(imp.plan.toCreate.filter((_, i) => imp.selected.has(i)), listGroups());
   sheet.innerHTML = imp.plan
     ? importPreviewHtml(imp.plan, { selected: imp.selected, newGroups: imp.newGroups, warnings: imp.warnings, busy: imp.busy })
     : importChooseHtml({ errors: imp.warnings, busy: imp.busy });
@@ -356,8 +357,6 @@ on('import-file', async (input) => {
   imp.plan = planImport(rows, [...db.swimmers.values()]);
   imp.selected = new Set(imp.plan.toCreate.map((_, i) => i));
   imp.warnings = errors;
-  const known = new Set(listGroups().map((g) => g.name.trim().toLowerCase()));
-  imp.newGroups = [...new Map(imp.plan.toCreate.map((r) => r.group.trim()).filter((g) => g && !known.has(g.toLowerCase())).map((g) => [g.toLowerCase(), g])).values()];
   renderImport();
 }, 'change');
 on('import-toggle', (btn) => {
@@ -380,13 +379,14 @@ on('import-confirm', async () => {
   imp.busy = true;
   renderImport();
   const skipped = imp.plan.duplicates.length;
-  const { created } = await runImport(rows);
+  const { created, failed } = await runImport(rows);
   imp.token += 1;
   imp.busy = false;
   closeModal('modal-import');
+  const tail = `${skipped ? ` · ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}${failed ? ` · ${failed} en échec` : ''}`;
   toast(created > 0
-    ? `✅ Vous avez transféré ${created} nageur${created > 1 ? 's' : ''}${skipped ? ` · ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}`
-    : '⚠️ Aucun nouveau nageur transféré');
+    ? `${failed ? '⚠️' : '✅'} Vous avez transféré ${created} nageur${created > 1 ? 's' : ''}${tail}`
+    : `⚠️ Aucun nouveau nageur transféré${tail}`);
 });
 
 /** Enregistre l'écran Nageurs (remplace l'écran provisoire). */
