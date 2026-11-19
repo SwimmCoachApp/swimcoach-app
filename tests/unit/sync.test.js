@@ -118,6 +118,14 @@ test('retiré de l’espace : 42501 au flush → checkMembership, cache et ops d
   expect(onTeamLost).toHaveBeenCalledWith({ id: 'T2', name: 'Avenirs' });
 });
 
+test("accès perdu découvert par l'envoi en arrière-plan d'un espace quitté : le toast porte son vrai nom", async () => {
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'x', row: { id: 'x' } });
+  myTeams = [{ id: 'T2', name: 'Avenirs' }];
+  fake.client.failWith = () => rlsError();
+  suspendTeam();
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Tu n'as plus accès à l'espace « Benjamins »"));
+});
+
 test('42501 alors que je suis toujours membre : l’op refusée est retirée, la suite part', async () => {
   enqueue({ table: 'swimmers', kind: 'upsert', key: 'x', row: { id: 'x' } });
   enqueue({ table: 'swimmers', kind: 'upsert', key: 'y', row: { id: 'y' } });

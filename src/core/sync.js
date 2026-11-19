@@ -116,7 +116,11 @@ export async function refreshTable(table, ctx) {
   return 'merged';
 }
 
+/** Noms des espaces ouverts depuis le démarrage (le toast d'accès perdu peut arriver après la fermeture). */
+const knownNames = new Map();
+
 function teamName(teamId) {
+  if (knownNames.has(teamId)) return knownNames.get(teamId);
   if (current?.team.id === teamId) return current.team.name;
   const team = getCurrentTeam();
   return team?.id === teamId ? team.name : '';
@@ -203,6 +207,7 @@ export async function openTeam(coachId, team) {
     return;
   }
   current = { coachId, team };
+  knownNames.set(team.id, team.name);
   if (prev && prev.coachId === coachId) flushInBackground(prev);
   stopLive();
   loadCache(coachId, team.id); // vide d'abord le store de l'ancien espace (et sauvegarde son cache)

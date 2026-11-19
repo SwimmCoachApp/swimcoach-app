@@ -52,9 +52,31 @@ test('changement d’espace : écran de chargement tant que le nouvel espace n�
   await expect(page.getByText("Chargement de l'espace…")).toBeVisible();
   await expect(page.locator('[data-screen]')).toHaveCount(0);
   await expect(page.locator('.top-bar-team')).toContainText('Zèbre');
+  await page.getByRole('button', { name: 'Stats', exact: true }).click(); // navigation ignorée pendant le chargement
+  await page.getByRole('button', { name: 'Réglages' }).click();
+  await expect(page.getByText("Chargement de l'espace…")).toBeVisible();
+  await expect(page.locator('[data-screen]')).toHaveCount(0);
   release();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
   await expect(page.locator('[data-loading]')).toHaveCount(0);
+});
+
+test('double changement A → B → A pendant le chargement : l’espace final est A, coche et en-tête cohérents', async ({ page }) => {
+  await open(page, [{ id: T1, name: 'Alpha' }, { id: T2, name: 'Zèbre' }]);
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  await page.locator('.top-bar-team').click();
+  await expect(page.getByRole('button', { name: 'Zèbre' })).toBeVisible();
+  await page.route('**/rest/v1/teams*', async (route) => { await gate; await route.fallback(); });
+  await page.getByRole('button', { name: 'Zèbre' }).click();
+  await expect(page.locator('.top-bar-team')).toContainText('Zèbre');
+  await page.locator('.top-bar-team').click();
+  await expect(page.locator('.team-item.current')).toContainText('Zèbre');
+  await page.getByRole('button', { name: 'Alpha' }).click();
+  await expect(page.locator('.top-bar-team')).toContainText('Alpha');
+  release();
+  await expect(page.locator('[data-screen="calendar"]')).toContainText('Alpha');
+  await expect(page.locator('.top-bar-team')).toContainText('Alpha');
 });
 
 test('le thème sombre persiste après rechargement', async ({ page }) => {

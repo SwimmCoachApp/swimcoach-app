@@ -59,7 +59,7 @@ export function closeModal(id) {
  */
 export function showScreen(name) {
   const def = screens.get(name);
-  if (!ctx || !def) return;
+  if (!ctx || !def || ctx.loading) return; // pendant le chargement d'un espace, aucun écran de données
   ctx.current = name;
   const shell = ctx.root.querySelector('.shell');
   shell.dataset.active = name;
@@ -102,7 +102,7 @@ function teamListHtml(teams, currentId) {
  * @param {() => void} leave appelé après la déconnexion ou un changement d'espace (reprend le routage)
  */
 export function startApp(root, coach, team, leave) {
-  ctx = { root, coach, team, leave, current: 'calendar' };
+  ctx = { root, coach, team, leave, current: 'calendar', loading: false, teams: null }; // loading : changement d'espace en cours
   const nav = ORDER.filter((n) => screens.has(n));
   root.innerHTML = html`<div class="shell" data-active="calendar">
     <header class="top-bar">
@@ -121,7 +121,7 @@ export function startApp(root, coach, team, leave) {
   showScreen('calendar');
 }
 
-on('nav', (el) => showScreen(el.dataset.key));
+on('nav', (el) => showScreen(el.dataset.key)); // sans effet pendant le chargement (voir showScreen)
 on('close-modal', (el) => closeModal(el.dataset.id));
 on('close-backdrop', (el, ev) => { if (ev.target === el) closeModal(el.id); });
 on('toggle-theme', (el) => {
@@ -132,8 +132,8 @@ on('logout', () => { if (ctx) leaveSession(ctx.leave); });
 on('open-teams', async () => {
   if (!ctx) return;
   const body = document.getElementById('teams-body');
-  const show = (teams) => { body.innerHTML = teamListHtml(teams, ctx.team.id); };
-  show([ctx.team]);
+  const show = (teams) => { ctx.teams = teams; body.innerHTML = teamListHtml(teams, ctx.team.id); };
+  show(ctx.teams ?? [ctx.team]);
   openModal('modal-teams');
   try { show(await listMyTeams()); } catch { /* hors ligne : on garde l'espace ouvert */ }
 });
@@ -141,6 +141,8 @@ on('switch-team', (el) => {
   closeModal('modal-teams');
   if (!ctx || el.dataset.id === ctx.team.id) return;
   const name = el.querySelector('span')?.textContent ?? '';
+  ctx.loading = true; // la navigation est bloquée jusqu'au prochain startApp
+  ctx.team = { id: el.dataset.id, name }; // cible en cours : coche de la liste et en-tête restent cohérents
   suspendTeam(); // coupe le temps réel et vide le store de l'ancien espace tout de suite
   setCurrentTeam(el.dataset.id);
   const shell = ctx.root.querySelector('.shell');
