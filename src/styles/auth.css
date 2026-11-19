@@ -1,0 +1,74 @@
+/* Écrans d'accès : connexion, code du club, création d'espace. */
+.auth {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--text, #14202e);
+  background: var(--bg, #eef3f8);
+}
+.auth-logo {
+  font-family: 'Bricolage Grotesque', Inter, system-ui, sans-serif;
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--blue, #1a5fb4);
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  box-sizing: border-box;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--card, #fff);
+  box-shadow: 0 2px 16px rgb(20 32 46 / 10%);
+}
+.auth-title { margin: 0 0 8px; font-size: 22px; }
+.auth-hint { margin: 0 0 12px; font-size: 14px; color: var(--muted, #5b6b7d); }
+.auth-label { display: block; margin: 12px 0 4px; font-size: 14px; font-weight: 600; }
+.auth .form-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  font: inherit;
+  font-size: 16px;
+  border: 1.5px solid var(--border, #c9d4e0);
+  border-radius: 10px;
+  background: var(--bg, #fff);
+  color: inherit;
+}
+.auth .form-input:focus-visible { outline: 2px solid var(--blue, #1a5fb4); outline-offset: 1px; }
+.auth .btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 13px;
+  font: inherit;
+  font-weight: 700;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.auth .btn-primary { background: var(--blue, #1a5fb4); color: #fff; }
+.auth .btn:disabled { opacity: 0.6; cursor: default; }
+.auth-links { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.auth .btn-link {
+  padding: 8px 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--blue, #1a5fb4);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.auth-msg { min-height: 1.2em; margin: 12px 0 0; font-size: 14px; }
+.auth-msg[data-kind='error'] { color: var(--danger, #b3261e); }
+.auth-msg[data-kind='info'] { color: var(--ok, #1b6e3c); }
+@media (prefers-color-scheme: dark) {
+  .auth { --text: #e8eef5; --bg: #0f1722; --card: #1a2433; --muted: #9fb0c3; --border: #34445a; --blue: #6aa6ff; }
+  .auth .btn-primary { color: #0f1722; }
+}

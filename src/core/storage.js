@@ -145,3 +145,23 @@ export function clearAllCoachData() {
     if (key.startsWith(PREFIX) && !keep.has(key)) rawRemove(key);
   }
 }
+
+/**
+ * Adaptateur de stockage pour supabase-js (session d'authentification).
+ * Limité aux clés `swimcoach2_` : toute autre clé est ignorée (lecture : null).
+ * @type {{getItem: (key: string) => string|null, setItem: (key: string, value: string) => void, removeItem: (key: string) => void}}
+ */
+export const authStorageAdapter = {
+  getItem: (key) => (key.startsWith(PREFIX) ? rawGet(key) : null),
+  setItem: (key, value) => {
+    if (!key.startsWith(PREFIX)) return;
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // stockage plein ou indisponible : la session ne sera pas retenue
+    }
+  },
+  removeItem: (key) => {
+    if (key.startsWith(PREFIX)) rawRemove(key);
+  },
+};
