@@ -256,6 +256,33 @@ test('initialSync : onSynced n’est appelé qu’après une lecture complète d
   configureSync({ onSynced: () => {} });
 });
 
+test('initialSync : un onSynced qui lève ne saute pas l’envoi de la file', async () => {
+  configureSync({ toast, onTeamLost, onSynced: () => { throw new Error('boom'); } });
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'x', row: { id: 'x' } });
+  expect(await initialSync()).toBe(true);
+  expect(pendingCount('T1')).toBe(0);
+  expect(fake.client.calls.some((c) => c.table === 'swimmers' && c.row?.id === 'x')).toBe(true);
+  configureSync({ onSynced: () => {} });
+});
+
+test('23505 sur groups (course des groupes par défaut) : écartée sans toast, relecture programmée', async () => {
+  enqueue({ table: 'groups', kind: 'upsert', key: 'g1', row: { id: 'g1', name: 'Loisirs' } });
+  fake.client.failWith = (call) => (call.table === 'groups' ? pgError('23505') : null);
+  await flush(fake.client, 'A', 'T1');
+  expect(rejectedCount('T1')).toBe(1);
+  expect(toast).not.toHaveBeenCalled();
+  fake.client.failWith = null;
+  fake.client.tables.groups = [{ id: 'gs', team_id: 'T1', name: 'Loisirs' }];
+  await vi.waitFor(() => expect(db.groups.has('gs')).toBe(true), { timeout: 3000 });
+});
+
+test('23505 sur une autre table : le toast reste affiché', async () => {
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'x', row: { id: 'x' } });
+  fake.client.failWith = () => pgError('23505');
+  await flush(fake.client, 'A', 'T1');
+  expect(toast).toHaveBeenCalledWith('1 modification(s) refusée(s) par le serveur');
+});
+
 test('initialSync : vérifie l’appartenance, charge les 7 tables puis envoie la file', async () => {
   fake.client.tables.groups = [{ id: 'g1', team_id: 'T1' }];
   fake.client.tables.plan_weeks = [{ week_key: '2026-W47', team_id: 'T1' }];

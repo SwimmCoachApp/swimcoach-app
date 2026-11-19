@@ -42,8 +42,10 @@ export function configureSync(deps = {}) {
 
 configureOutbox({
   forbidden: (op) => verifyMembership(op.coachId, op.teamId),
-  rejected: (op, _error, total) => {
-    hooks.toast(`${total} modification(s) refusée(s) par le serveur`);
+  rejected: (op, error, total) => {
+    // Course des groupes par défaut (deux appareils créent les mêmes noms) : mise de côté sans bruit, la relecture rétablit le serveur.
+    const quiet = op.table === 'groups' && error?.code === '23505';
+    if (!quiet) hooks.toast(`${total} modification(s) refusée(s) par le serveur`);
     scheduleRefresh(op.table); // la ligne refusée revient à l'état du serveur
   },
 });
@@ -186,7 +188,13 @@ export async function initialSync() {
       if (res === 'closed') return false;
       if (res !== 'merged') complete = false;
     }
-    if (complete && isOpen(ctx)) hooks.onSynced();
+    if (complete && isOpen(ctx)) {
+      try {
+        hooks.onSynced();
+      } catch {
+        // un crochet qui échoue ne doit jamais empêcher l'envoi de la file
+      }
+    }
     await flush(supabase, ctx.coachId, ctx.teamId);
   } catch {
     return false;

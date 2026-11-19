@@ -4,7 +4,7 @@ vi.mock('../../src/core/supabase.js', () => ({ supabase: { from: () => ({ upsert
 vi.mock('../../src/core/session.js', () => ({ getCoach: () => ({ id: 'A' }), onCoachChange: () => () => {} }));
 
 const { ensureDefaultGroups, DEFAULT_GROUPS } = await import('../../src/core/default-groups.js');
-const { db, loadCache, resetStore, upsertLocal } = await import('../../src/core/store.js');
+const { db, loadCache, resetStore, upsertLocal, deleteLocal } = await import('../../src/core/store.js');
 const { pendingCount } = await import('../../src/core/outbox.js');
 
 beforeEach(() => {
@@ -27,4 +27,22 @@ test('espace avec au moins un groupe : rien n’est créé', () => {
   expect(ensureDefaultGroups()).toBe(false);
   expect(db.groups.size).toBe(1);
   expect(pendingCount('T1', 'A')).toBe(0);
+});
+
+test('une seule fois par espace et par appareil : groupes tous supprimés, ils ne reviennent pas', () => {
+  expect(ensureDefaultGroups()).toBe(true);
+  for (const key of [...db.groups.keys()]) deleteLocal('groups', key);
+  expect(db.groups.size).toBe(0);
+  expect(ensureDefaultGroups()).toBe(false);
+  expect(db.groups.size).toBe(0);
+  resetStore({ save: false });
+  loadCache('A', 'T2'); // un autre espace est proposé à son tour
+  expect(ensureDefaultGroups()).toBe(true);
+});
+
+test('espace qui a déjà des groupes : compté comme proposé, vider les groupes ne les recrée pas', () => {
+  upsertLocal('groups', { id: 'g1', name: 'Mon groupe', sort_order: 0 });
+  expect(ensureDefaultGroups()).toBe(false);
+  deleteLocal('groups', 'g1');
+  expect(ensureDefaultGroups()).toBe(false);
 });
