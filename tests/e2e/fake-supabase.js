@@ -37,9 +37,10 @@ const authError = (status, errorCode, msg) => new HttpError(status, { code: stat
 /**
  * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext | Array<import('@playwright/test').Page | import('@playwright/test').BrowserContext>} target
  * @param {{users?: object[], teams?: object[], members?: object[], tables?: object, clubCode?: string,
- *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number}} [opts]
+ *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number, liveffnPages?: Record<string, string>}} [opts]
  *   users : {email, password, activated?, id?, confirmed?} ; teams : {id?, name} ;
- *   members : {team_id, email} (e-mail inconnu = invitation en attente) ; tables : lignes initiales.
+ *   members : {team_id, email} (e-mail inconnu = invitation en attente) ; tables : lignes initiales ;
+ *   liveffnPages : HTML renvoyé par la fonction liveffn-proxy, par identifiant de compétition.
  */
 export async function installFakeSupabase(target, opts = {}) {
   const state = {
@@ -508,7 +509,27 @@ export async function installFakeSupabase(target, opts = {}) {
     }
     throw storageError(404, 'not_found', `fake: route stockage inconnue ${method} ${sub}`);
   }
-  const handleFunctions = () => ({ body: {} });
+  // ------------------------------------------------------------ fonctions
+  // liveffn-proxy : même contrat que supabase/functions/_shared/liveffn.js (JWT, entraîneur activé,
+  // competition = 1 à 7 chiffres) ; la page renvoyée vient de `state.liveffnPages[competition]`.
+  // `state.liveffnStatus` force une réponse d'erreur (502, 504…).
+  state.liveffnPages = { ...(opts.liveffnPages ?? {}) };
+  state.liveffnStatus = null;
+  function handleFunctions(req) {
+    const name = req.path.replace(/^\/functions\/v1\//, '');
+    if (name !== 'liveffn-proxy') return { body: {} };
+    if (req.method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' } };
+    let user = null;
+    try { user = authedUser(req.headers, { required: false }); } catch { user = null; }
+    if (!user) return { status: 401, body: { error: 'unauthorized' } };
+    if (!coachRow(user.id)?.activated_at) return { status: 403, body: { error: 'not_activated' } };
+    const competition = req.query.get('competition') ?? '';
+    if (!/^\d{1,7}$/.test(competition) || req.query.get('structure') !== '39') return { status: 400, body: { error: 'invalid_competition' } };
+    if (state.liveffnStatus) return { status: state.liveffnStatus, body: { error: 'upstream_status' } };
+    const page = state.liveffnPages[competition];
+    if (page == null) return { status: 502, body: { error: 'upstream_status', status: 404 } };
+    return { status: 200, raw: page, contentType: 'text/html; charset=utf-8' };
+  }
 
   // ------------------------------------------------------------ branchement Playwright
   const cors = (reqHeaders) => ({

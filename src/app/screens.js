@@ -1,30 +1,8 @@
-/** Écrans provisoires : les tâches suivantes les remplacent par les vrais écrans (registerScreen). */
-import { html } from '../core/html.js';
+/** Écran provisoire restant : les réglages hébergent la déconnexion, jusqu'à la tâche 17. */
 import { registerScreen } from './shell.js';
 
-const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
-const ICONS = {
-  perfs: svg('<path d="M8 4h8v5a4 4 0 0 1-8 0V4zM8 6H4v1a3 3 0 0 0 4 2.8M16 6h4v1a3 3 0 0 1-4 2.8M12 13v4M8 20h8"/>'),
-};
-
-const TITLES = { perfs: 'Perfs' };
-
-/** Enregistre un écran provisoire. */
-function placeholder(name, extra = '') {
-  registerScreen(name, {
-    title: TITLES[name],
-    icon: ICONS[name],
-    render(root) {
-      root.classList.add('screen');
-      root.innerHTML = html`<h1 class="screen-title">${TITLES[name]}</h1>`;
-      if (extra) root.insertAdjacentHTML('beforeend', extra);
-    },
-  });
-}
-
-/** Enregistre les écrans provisoires restants (Calendrier : features/calendar, Nageurs : features/contacts, Stats : features/stats, Planif. : features/planning). Les réglages hébergent provisoirement la déconnexion, jusqu'à la tâche 17. */
+/** Enregistre les réglages provisoires (Calendrier : features/calendar, Nageurs : features/contacts, Stats : features/stats, Perfs : features/perfs, Planif. : features/planning). */
 export function registerPlaceholderScreens() {
-  for (const name of Object.keys(ICONS)) placeholder(name);
   registerScreen('settings', {
     title: 'Réglages',
     render(root) {

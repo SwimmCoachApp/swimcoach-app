@@ -13,6 +13,7 @@ import './styles/calendar.css';
 import './styles/presence.css';
 import './styles/stats.css';
 import './styles/planning.css';
+import './styles/perfs.css';
 import './styles/club.css';
 import './styles/auth.css';
 import { initSession, getCoach, onCoachChange, onPasswordRecovery, isRecovering, configureSession } from './core/session.js';
@@ -29,6 +30,7 @@ import { registerContactsScreen } from './features/contacts/index.js';
 import { registerCalendarScreen } from './features/calendar/index.js';
 import { registerStatsScreen } from './features/stats/index.js';
 import { registerPlanningScreen } from './features/planning/index.js';
+import { registerPerfsScreen } from './features/perfs/index.js';
 import { registerPresence } from './features/presence/index.js';
 import { initTheme } from './app/theme.js';
 import { toast } from './app/toast.js';
@@ -48,6 +50,7 @@ registerCalendarScreen();
 registerPresence();
 registerStatsScreen();
 registerPlanningScreen();
+registerPerfsScreen();
 initUpdate();
 
 /** Garde de démarrage : choisit l'écran selon la session, l'activation et les espaces. */
