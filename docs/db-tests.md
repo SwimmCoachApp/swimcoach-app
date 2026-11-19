@@ -10,7 +10,7 @@ Fichiers : `supabase/tests/database/`
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
 - `invite_code.test.sql` : activation par le code du club (27 assertions).
 - `teams.test.sql` : espaces, membres et invitations (80 assertions).
-- `storage.test.sql` : stockage privé des photos (32 assertions).
+- `storage.test.sql` : stockage privé des photos, noms stricts (41 assertions).
 
 Règle d'écriture : chaque assertion pgTAP commence **en début de ligne** par
 `select` (`select is(`, `select throws_ok(`, `select * from finish()`...). Le script
@@ -154,6 +154,11 @@ TB. Les objets sont insérés directement dans `storage.objects` (`bucket_id, na
   pas de dossier → null ; exécutable par `authenticated`, pas par `anon`).
 - A dépose sous TA. Noms `pasunuuid/x.jpg` et `x.jpg` refusés (42501, pas d'erreur de
   conversion) ; un objet au nom invalide (posé en `postgres`) est invisible, sans erreur.
+- Noms stricts (`20261119145634_storage_strict_names.sql`) : dépôt et remplacement exigent
+  `<uuid>/(swimmers|sessions)/<uuid>.jpg` en minuscules. Refusés (42501) : dossier ou
+  fichier en majuscules, `<TA>/../x.jpg`, `<TA>/other/<uuid>.jpg`, `.webp`, `.png`,
+  `<TA>/swimmers/x.jpg`, nom suivi d'un saut de ligne, renommage (UPDATE) vers un nom
+  non conforme. Les noms valides restent acceptés.
 - C lit, remplace, supprime sous TA ; ne déplace pas vers TB (42501).
 - B : ne voit rien de TA, ne dépose pas sous TA, pas de remplacement par upsert
   (`on conflict (id) do update` sur l'identifiant de la photo de TA → 42501), ne renomme
