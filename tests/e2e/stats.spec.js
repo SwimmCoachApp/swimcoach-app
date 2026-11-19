@@ -79,7 +79,7 @@ test('stats du mois : séances, km, pourcentages par nageur ; archivé d\'une sa
   await expect(rows.nth(1)).toContainText('Louis Martin');
   await expect(rows.nth(1)).toContainText('1/3');
   await expect(rows.nth(1)).toContainText('33%');
-  await expect(screen.locator('#stats-chart')).toBeVisible();
+  await expect(screen.locator('canvas')).toHaveCount(0);
   // saison : octobre s'ajoute (11 km), navigation de saison
   await screen.getByRole('button', { name: 'Saison', exact: true }).click();
   await expect(screen.locator('#stat-month-label')).toHaveText('Saison 2026–27');
@@ -102,7 +102,8 @@ test('PDF : exportPdf reçoit un HTML qui contient le nom du premier nageur, san
   expect(pdf.html).toContain('Camille Durand');
   expect(pdf.html).toContain('Bilan');
   expect(pdf.html).toContain('TOAC Natation');
-  expect(pdf.html).toContain('@font-face');
+  expect(pdf.html).toContain("@font-face");
+  expect(pdf.html).not.toContain("<script");
   expect(pdf.html).not.toContain('fonts.googleapis.com');
   expect(pdf.title).toBe('Bilan Novembre 2026');
 });

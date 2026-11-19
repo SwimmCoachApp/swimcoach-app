@@ -1,4 +1,4 @@
-import { computeStats, periodLabel } from '../../src/features/stats/logic.js';
+import { computeStats, periodLabel, shiftPeriod } from '../../src/features/stats/logic.js';
 import { statsPdfHtml } from '../../src/features/stats/view.js';
 import { db, loadCache, resetStore, upsertLocal } from '../../src/core/store.js';
 
@@ -83,4 +83,21 @@ test('PDF : contient le nom (échappé), les chiffres et aucune balise injectée
 test('libellés de période', () => {
   expect(periodLabel({ scope: 'season', y: 2026 })).toBe('Saison 2026–27');
   expect(periodLabel({ scope: 'month', y: 2026, m0: 10 })).toBe('Novembre 2026');
+});
+
+test('shiftPeriod : décembre → janvier et janvier → décembre, saisons', () => {
+  expect(shiftPeriod({ scope: 'month', y: 2026, m0: 11 }, 1)).toEqual({ scope: 'month', y: 2027, m0: 0 });
+  expect(shiftPeriod({ scope: 'month', y: 2027, m0: 0 }, -1)).toEqual({ scope: 'month', y: 2026, m0: 11 });
+  expect(shiftPeriod({ scope: 'season', y: 2026 }, -1)).toEqual({ scope: 'season', y: 2025 });
+});
+
+test('un nageur arrivé après la saison de la période est absent', () => {
+  sw('Late', { joined_season: 2027 });
+  expect(computeStats({ scope: 'month', y: 2026, m0: 10 }).perSwimmer.map((r) => r.swimmer.id)).not.toContain('Late');
+  expect(computeStats({ scope: 'season', y: 2027 }).perSwimmer.map((r) => r.swimmer.id)).toContain('Late');
+});
+
+test('aucune séance de natation : « 0 km / séance »', async () => {
+  const { heroTexts } = await import('../../src/features/stats/view.js');
+  expect(heroTexts(computeStats({ scope: 'month', y: 2026, m0: 0 })).sub).toContain('0 km / séance');
 });

@@ -39,7 +39,6 @@ export function screenHtml() {
       </div>
     </div>
     <div class="stats-summary" id="stats-summary"></div>
-    <div class="stats-chart" id="stats-chart-box"><div class="stats-swimmers-header" id="stats-chart-title">Progression</div><div class="stats-chart-canvas"><canvas id="stats-chart" role="img" aria-label="Distance de natation"></canvas></div></div>
     <div class="stats-swimmers">
       <div class="stats-swimmers-header">Participation et distance</div>
       <div id="stats-swimmer-rows"></div>
@@ -55,7 +54,7 @@ export function pdfSubLabel(period) {
 /** @param {object} stats résultat de computeStats @returns {{km: string, sub: string}} textes du bloc héros */
 export function heroTexts(stats) {
   const n = stats.sessions.nat;
-  return { km: fmtKm(stats.km), sub: html`<span>${plural(n, 'séance')}</span><span class="shk-dim">${fmtKm(n > 0 ? stats.km / n : 0)} km / séance</span>` };
+  return { km: fmtKm(stats.km), sub: html`<span>${plural(n, 'séance')}</span><span class="shk-dim">${n > 0 ? fmtKm(stats.km / n) : '0'} km / séance</span>` };
 }
 
 /** @param {object} stats @returns {string} pastilles muscu et compétitions */
@@ -154,10 +153,6 @@ const PDF_CSS = `
     .toolbar{display:none!important;}
     .sheet{max-width:none;margin:0;box-shadow:none;}
   }`;
-
-const PDF_SCRIPT = `
-  document.getElementById('pdf-print').addEventListener('click', () => window.print());
-  document.getElementById('pdf-close').addEventListener('click', () => window.close());`;
 
 function cell(pres, total, pct) {
   if (total === 0) return '<div class="cell"><div class="cell-top"><b class="frac dim">—</b></div><span class="track"></span></div>';
@@ -260,7 +255,6 @@ export function statsPdfHtml(stats, { teamName = '', swimmerSvg = '', now = new 
       <span>SwimCoach App${teamName ? raw(html` · ${teamName}`) : ''} · édité le ${date}</span>
     </div>
   </div>
-  <script>${raw(PDF_SCRIPT)}</script>
 </body>
 </html>`;
 }

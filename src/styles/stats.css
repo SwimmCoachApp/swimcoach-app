@@ -37,8 +37,3 @@
 .stats-pdf-btn{display:flex;align-items:center;gap:8px;margin:0 16px 14px;padding:13px 18px;background:var(--card-bg);border:1.5px solid var(--border2);border-radius:var(--radius);font-size:14px;font-weight:700;color:var(--text);width:calc(100% - 32px);}
 .stats-pdf-btn-info{flex:1;text-align:left;}
 .stats-pdf-btn-sub{font-size:11px;color:var(--text2);font-weight:400;margin-top:2px;}
-/* Graphique de progression */
-.stats-chart,.stats-swimmers,.stats-summary{flex-shrink:0;}
-.stats-chart{margin:0 16px 14px;background:var(--card-bg);border-radius:22px;overflow:hidden;}
-.stats-chart .stats-swimmers-header{border-bottom:none;padding:14px 16px 4px;font-family:var(--font-display);font-size:16px;font-weight:800;}
-.stats-chart-canvas{position:relative;height:180px;padding:4px 12px 12px;}

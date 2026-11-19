@@ -53,9 +53,7 @@ function inPeriod(date, { scope, y, m0 }) {
 /**
  * @param {{scope: 'month'|'season', y: number, m0?: number}} period y : année du mois, ou année de début de saison
  * @returns {{sessions: {nat: number, musc: number, comp: number}, km: number,
- *   perSwimmer: Array<{swimmer: object, natPres: number, muscPres: number, compPres: number, natPct: number, muscPct: number, compPct: number, natKm: number}>,
- *   series: Array<{label: string, km: number}>}}
- *   series : km de natation par mois (saison) ou par jour de séance (mois), pour le graphique
+ *   perSwimmer: Array<{swimmer: object, natPres: number, muscPres: number, compPres: number, natPct: number, muscPct: number, compPct: number, natKm: number}>}}
  */
 export function computeStats(period) {
   const sessions = [...db.sessions.values()].filter((s) => inPeriod(s.date, period));
@@ -91,21 +89,5 @@ export function computeStats(period) {
     sessions: { nat: groups.nat.length, musc: groups.musc.length, comp: groups.comp.length },
     km: total,
     perSwimmer,
-    series: seriesOf(period, groups.nat),
   };
-}
-
-function seriesOf(period, natSessions) {
-  if (period.scope === 'season') {
-    const months = Array.from({ length: 12 }, (_, i) => ((8 + i) % 12));
-    const sums = new Map(months.map((m) => [m, 0]));
-    for (const s of natSessions) {
-      const m = Number(s.date.slice(5, 7)) - 1;
-      sums.set(m, sums.get(m) + km(s));
-    }
-    return months.map((m) => ({ label: monthName(m).slice(0, 4).replace(/\.$/, ''), km: sums.get(m) }));
-  }
-  const days = new Map();
-  for (const s of natSessions) days.set(s.date, (days.get(s.date) ?? 0) + km(s));
-  return [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ label: String(Number(date.slice(8))), km: v }));
 }

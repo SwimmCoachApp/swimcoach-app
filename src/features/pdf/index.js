@@ -29,17 +29,22 @@ export function fontFaceCss() {
 
 /**
  * Ouvre le document HTML dans une fenêtre imprimable.
- * @param {string} html document complet (déjà échappé par l'appelant)
+ * @param {string} html document complet (déjà échappé par l'appelant) ; boutons optionnels #pdf-print et #pdf-close
  * @param {string} name titre de la fenêtre / nom du fichier proposé à l'enregistrement
  */
 export function exportPdf(html, name) {
   const win = window.open('', '_blank', 'width=860,height=700,scrollbars=yes');
-  if (!win) {
+  if (!win || win.closed) {
     toast('Autorise les fenêtres pop-up pour exporter le PDF');
     return;
   }
-  const doc = String(html).replace('</head>', `<style>${fontFaceCss()}</style></head>`);
+  const style = `<style>${fontFaceCss()}</style>`;
+  const source = String(html);
+  const doc = source.includes('</head>') ? source.replace('</head>', () => `${style}</head>`) : style + source;
   win.document.write(doc);
   win.document.close();
+  // Boutons de la barre d'outils (ids pdf-print / pdf-close) : écouteurs posés depuis l'application, sans script dans la fenêtre
+  win.document.getElementById?.('pdf-print')?.addEventListener('click', () => win.print());
+  win.document.getElementById?.('pdf-close')?.addEventListener('click', () => win.close());
   if (name) win.document.title = name;
 }
