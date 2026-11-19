@@ -168,3 +168,61 @@ test('(g) une session existante rouvre l’app sans reconnexion', async ({ page 
   await page.goto('/');
   await expect(page.locator('[data-screen="calendar"]')).toContainText('Autre');
 });
+
+test('(h) une requête sans clé apikey reçoit 401', async ({ page }) => {
+  await installFakeSupabase(page);
+  await page.goto('/');
+  const statuses = await page.evaluate(async () => {
+    const out = [];
+    for (const path of ['/rest/v1/teams', '/auth/v1/settings', '/storage/v1/object/x', '/functions/v1/liveffn-proxy']) {
+      const r = await fetch(`https://zuguceilohochmpnbzaz.supabase.co${path}`);
+      out.push(r.status);
+    }
+    return out;
+  });
+  expect(statuses).toEqual([401, 401, 401, 401]);
+});
+
+test('(i) l’espace mémorisé dont on n’est plus membre : ouvre le premier et réécrit la clé', async ({ page }) => {
+  const teamId = '77777777-7777-4777-8777-777777777777';
+  const fake = await installFakeSupabase(page, {
+    users: [{ email: 'coach@toac.fr', password: PW, activated: true }],
+    teams: [{ id: teamId, name: 'Seul espace' }],
+    members: [{ team_id: teamId, email: 'coach@toac.fr' }],
+  });
+  const session = fake.sessionFor('coach@toac.fr');
+  await page.addInitScript(([s, id]) => {
+    if (!localStorage.getItem('swimcoach2_auth')) {
+      localStorage.setItem('swimcoach2_auth', JSON.stringify(s));
+      localStorage.setItem(`swimcoach2_${id}_team`, JSON.stringify('99999999-9999-4999-8999-999999999999'));
+    }
+  }, [session, session.user.id]);
+  await page.goto('/');
+  await expect(page.locator('[data-screen="calendar"]')).toContainText('Seul espace');
+  const stored = await page.evaluate((id) => localStorage.getItem(`swimcoach2_${id}_team`), session.user.id);
+  expect(JSON.parse(stored)).toBe(teamId);
+});
+
+test('(j) XSS : nom d’espace et e-mail s’affichent comme du texte', async ({ page }) => {
+  const evil = '<img src=x onerror=window.__xss=1>';
+  await installFakeSupabase(page, { users: [{ email: 'coach@toac.fr', password: PW, activated: true }] });
+  await page.goto('/');
+  await login(page, 'coach@toac.fr');
+  await expect(page.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
+  await expect(page.locator('[data-screen="create-team"] strong')).toHaveText('coach@toac.fr');
+  await page.getByLabel("Nom de l'espace").fill(evil);
+  await page.getByRole('button', { name: 'Créer' }).click();
+  await expect(page.locator('[data-screen="calendar"]')).toContainText(evil);
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+  expect(await page.locator('[data-screen="calendar"] img').count()).toBe(0);
+});
+
+test('(j bis) XSS : un e-mail piégé reste du texte sur l’écran du code', async ({ page }) => {
+  const evilMail = 'a<img src=x onerror=window.__xss=1>@toac.fr';
+  await installFakeSupabase(page, { users: [{ email: evilMail, password: PW }] });
+  await page.goto('/');
+  await login(page, evilMail);
+  await expect(page.getByLabel('Code du club')).toBeVisible();
+  await expect(page.locator('[data-screen="code"] strong')).toHaveText(evilMail);
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+});

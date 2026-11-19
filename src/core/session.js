@@ -67,7 +67,7 @@ async function loadCoach(user) {
   const { data, error } = await supabase.from('coaches').select('id, activated_at').eq('id', user.id).maybeSingle();
   if (!error) {
     activated = !!data?.activated_at;
-    if (activated) coachStore(user.id).set('activated', true);
+    coachStore(user.id).set('activated', activated);
   } else {
     activated = coachStore(user.id).get('activated') === true;
   }

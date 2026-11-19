@@ -25,5 +25,9 @@ async function route() {
 
 onCoachChange(route);
 onPasswordRecovery(route);
-await initSession();
-await route();
+try {
+  await initSession();
+  await route();
+} catch {
+  root.textContent = "Impossible de démarrer l'application. Vérifie ta connexion puis recharge la page.";
+}

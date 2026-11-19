@@ -9,6 +9,7 @@
 // entraîneurs) partagent le même état. L'isolation imite la RLS : un entraîneur activé ne lit
 // et n'écrit que les lignes des espaces dont il est membre.
 import { randomUUID } from 'node:crypto';
+import { SUPABASE_PUBLISHABLE_KEY } from '../../src/core/config.js';
 
 const TEAM_TABLES = ['groups', 'swimmers', 'sessions', 'presence', 'plan_weeks', 'plan_events', 'performances'];
 const DIRECT_WRITE_FORBIDDEN = ['teams', 'team_members', 'team_invites', 'coaches'];
@@ -135,6 +136,7 @@ export async function installFakeSupabase(target, opts = {}) {
     if (sub === '/signup' && method === 'POST') {
       const email = String(body.email || '').toLowerCase();
       if (!email || !body.password) throw authError(422, 'validation_failed', 'Signup requires a valid password');
+      if (String(body.password).length < 10) throw authError(422, 'weak_password', 'Password should be at least 10 characters.');
       const existing = userByEmail(email);
       if (existing) return { body: { ...apiUser(existing), id: randomUUID(), identities: [] } }; // anti-énumération
       const u = addUser({ email, password: body.password, confirmed: state.autoConfirm });
@@ -399,6 +401,7 @@ export async function installFakeSupabase(target, opts = {}) {
     const targets = filterRows(visibleRows(table, user), query);
     if (method === 'PATCH') {
       if (!user || DIRECT_WRITE_FORBIDDEN.includes(table)) throw rls();
+      if (TEAM_TABLES.includes(table) && body && 'team_id' in body && !mine.has(body.team_id)) throw rls();
       for (const r of targets) Object.assign(r, clone(body));
       return wantRep ? { status: 200, body: shape(project(targets, select), headers) } : { status: 204, body: null };
     }
@@ -441,6 +444,14 @@ export async function installFakeSupabase(target, opts = {}) {
     const headers = request.headers();
     if (request.method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: cors(headers) });
+      return;
+    }
+    if (headers.apikey !== SUPABASE_PUBLISHABLE_KEY) {
+      await route.fulfill({
+        status: 401,
+        headers: { ...cors(headers), 'content-type': 'application/json' },
+        body: JSON.stringify({ message: 'No API key found in request', hint: 'No `apikey` request header or url param was found.' }),
+      });
       return;
     }
     const url = new URL(request.url());
