@@ -50,7 +50,7 @@ export function monthBadgesHtml(events) {
   return [['comp', '🏆'], ['stage', '🏕'], ['nat', '🎯']].filter(([t]) => has(t)).map(([t, icon]) => html`<span class="plan-badge plan-badge-${t}">${icon}</span>`).join('');
 }
 
-/** @param {object} ev @param {string} mKey @returns {string} */
+/** @param {object} ev @returns {string} */
 function eventRowHtml(ev) {
   return html`<div class="plan-event-row">
       <div class="plan-event-icon ${ev.type}">${EVENT_ICONS[ev.type] || '📝'}</div>

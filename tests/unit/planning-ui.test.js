@@ -15,7 +15,7 @@ const toasts = [];
 vi.mock('../../src/app/toast.js', () => ({ toast: (m) => toasts.push(m) }));
 
 const { registerPlanningScreen } = await import('../../src/features/planning/index.js');
-const { db, loadCache, resetStore, upsertLocal } = await import('../../src/core/store.js');
+const { db, loadCache, resetStore, upsertLocal, deleteLocal } = await import('../../src/core/store.js');
 const { teamStore } = await import('../../src/core/storage.js');
 
 const TEAM = '55555555-5555-4555-8555-555555555555';
@@ -132,4 +132,27 @@ test('les km réalisés suivent les séances (natation et compétition) et color
   upsertLocal('sessions', { id: 's2', date: '2026-11-22', type: 'comp', km: 3 });
   expect(real().className).toContain('week-km-ok');
   expect(real().querySelector('.plan-week-km-real-val').textContent).toBe('20.0');
+});
+
+test('événement supprimé ailleurs pendant que sa feuille est ouverte : pas de recréation, message et feuille fermée', () => {
+  const ev = upsertLocal('plan_events', { id: '44444444-4444-4444-8444-000000000001', month_key: '2026-11', type: 'comp', title: 'Régionaux', description: '', start_date: '2026-11-21', end_date: null });
+  $(`[data-action="plan-edit-event"][data-id="${ev.id}"]`).click();
+  expect($('#modal-plan-event').classList.contains('open')).toBe(true);
+  deleteLocal('plan_events', ev.id); // un autre entraîneur l'a supprimé
+  $('#plan-ev-title').value = 'Régionaux 2';
+  $('[data-action="plan-save-event"]').click();
+  expect(toasts.at(-1)).toBe('Cet événement a été supprimé');
+  expect(db.plan_events.size).toBe(0);
+  expect($('#modal-plan-event').classList.contains('open')).toBe(false);
+  expect(ops()).toEqual([]);
+});
+
+test('suppression d\'un événement déjà disparu : message, aucune opération', () => {
+  const ev = upsertLocal('plan_events', { id: '44444444-4444-4444-8444-000000000002', month_key: '2026-11', type: 'comp', title: 'X', description: '', start_date: '2026-11-21', end_date: null });
+  $(`[data-action="plan-ask-delete-event"][data-id="${ev.id}"]`).click();
+  deleteLocal('plan_events', ev.id);
+  $('[data-action="plan-do-delete-event"]').click();
+  expect(toasts.at(-1)).toBe('Cet événement a été supprimé');
+  expect(ops()).toEqual([]);
+  expect($('#dialog-plan-event').classList.contains('open')).toBe(false);
 });

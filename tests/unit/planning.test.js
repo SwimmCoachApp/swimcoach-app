@@ -1,11 +1,12 @@
 import { vi } from 'vitest';
 
+const sent = [];
 vi.mock('../../src/core/supabase.js', () => ({
-  supabase: { from: () => ({ upsert: async () => ({ error: null }), delete: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }) }) },
+  supabase: { from: () => ({ upsert: async (row) => { sent.push(row); return { error: null }; }, delete: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }) }) },
 }));
 vi.mock('../../src/core/session.js', () => ({ getCoach: () => ({ id: 'A' }), onCoachChange: () => () => {} }));
 
-const { isoWeekKey, weeksOfMonth, savePlanWeek, savePlanEvent, deletePlanEvent, weekRealKm, eventsInWeek, seasonMonths } = await import('../../src/features/planning/logic.js');
+const { seasonOfWeek, isoWeekKey, weeksOfMonth, savePlanWeek, savePlanEvent, deletePlanEvent, weekRealKm, eventsInWeek, seasonMonths } = await import('../../src/features/planning/logic.js');
 const { planningPdfHtml } = await import('../../src/features/planning/view.js');
 const { planMarksForMonth } = await import('../../src/features/calendar/logic.js');
 const { db, loadCache, resetStore, upsertLocal } = await import('../../src/core/store.js');
@@ -128,6 +129,26 @@ describe('savePlanWeek', () => {
     const w = savePlanWeek('2026-W47', 2026, null, '35', null);
     expect(w).toMatchObject({ content: 'Aérobie', km_target: 35, zone: 'seuil' });
     expect(db.plan_weeks.size).toBe(1);
+  });
+
+  test('seule la colonne modifiée part en file (avec la clé et la saison) ; le store garde la ligne entière', async () => {
+    savePlanWeek('2026-W47', 2026, 'Aérobie', 30, 'seuil');
+    await vi.waitFor(() => expect(pendingKeys('plan_weeks').size).toBe(0));
+    sent.length = 0;
+    savePlanWeek('2026-W47', 2026, null, '35', null);
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toEqual({ team_id: TEAM, week_key: '2026-W47', season_start: 2026, km_target: 35 });
+    expect(db.plan_weeks.get('2026-W47')).toMatchObject({ content: 'Aérobie', zone: 'seuil', km_target: 35 });
+  });
+
+  test('saison déterministe : celle du jeudi de la semaine, quel que soit le mois d\'où vient la modification', () => {
+    expect(seasonOfWeek('2026-W36')).toBe(2026); // 31 août → 6 sept. : jeudi 3 sept.
+    expect(seasonOfWeek('2026-W35')).toBe(2025);
+    expect(seasonOfWeek('2026-W53')).toBe(2026);
+    expect(seasonOfWeek('2027-W01')).toBe(2026);
+    expect(seasonOfWeek('2027-W35')).toBe(2027); // 30 août → 5 sept. 2027 : jeudi 2 sept.
+    expect(savePlanWeek('2026-W36', 2025, 'x', null, null).season_start).toBe(2026);
+    expect(savePlanWeek('2026-W36', 2026, null, null, 'y').season_start).toBe(2026);
   });
 
   test('km négatif, vide ou illisible : 0', () => {

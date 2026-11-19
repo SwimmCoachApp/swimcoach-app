@@ -165,28 +165,49 @@ function kmValue(v) {
 }
 
 /**
- * Enregistre une semaine du plan. `null` laisse le champ tel qu'il est dans le store (club4) : un champ
- * modifié n'écrase pas les autres, qu'un autre entraîneur a pu changer entre-temps. `updated_at` est posé
- * par le serveur.
+ * Saison (année de début) d'une semaine : celle de son jeudi (règle ISO), quel que soit le mois d'où l'on modifie.
  * @param {string} weekKey 'AAAA-Www'
- * @param {number} seasonStart
+ * @returns {number}
+ */
+export function seasonOfWeek(weekKey) {
+  const [y, w] = [Number(weekKey.slice(0, 4)), Number(weekKey.slice(6))];
+  const monday1 = mondayOf(new Date(y, 0, 4)); // le 4 janvier est toujours en semaine 1
+  const thursday = new Date(monday1.getFullYear(), monday1.getMonth(), monday1.getDate() + (w - 1) * 7 + 3);
+  return thursday.getMonth() >= 8 ? thursday.getFullYear() : thursday.getFullYear() - 1;
+}
+
+/**
+ * Enregistre une semaine du plan, champ par champ. `null` laisse le champ tel qu'il est : le store local garde
+ * la ligne entière, mais seules les colonnes modifiées (avec la clé et la saison) partent au serveur, qui ne met
+ * à jour que celles-là. Un entraîneur hors ligne ou en retard n'écrase donc jamais les autres champs de la
+ * semaine, qu'un autre entraîneur a pu changer. `season_start` vient de la semaine (jeudi) ; `updated_at` est
+ * posé par le serveur.
+ * @param {string} weekKey 'AAAA-Www'
+ * @param {number} _seasonStart ignoré (conservé pour l'interface) : la saison se déduit de la semaine
  * @param {string|null} content thème (texte brut)
  * @param {number|string|null} kmTarget
  * @param {string|null} zone
- * @returns {object} la ligne enregistrée
+ * @returns {object} la ligne enregistrée localement
  * @throws {Error} clé de semaine invalide
  */
-export function savePlanWeek(weekKey, seasonStart, content, kmTarget, zone) {
+export function savePlanWeek(weekKey, _seasonStart, content, kmTarget, zone) {
   if (!WEEK_RE.test(weekKey ?? '')) throw new Error('Semaine invalide');
   const existing = db.plan_weeks.get(weekKey) ?? EMPTY_WEEK;
-  return saveRow('plan_weeks', pick({
+  const changed = {};
+  if (content != null) changed.content = String(content);
+  if (kmTarget != null) changed.km_target = kmValue(kmTarget);
+  if (zone != null) changed.zone = String(zone).trim();
+  const season_start = seasonOfWeek(weekKey);
+  const full = pick({
     ...existing,
     week_key: weekKey,
-    season_start: seasonStart,
-    content: content != null ? String(content) : existing.content ?? '',
-    km_target: kmTarget != null ? kmValue(kmTarget) : kmValue(existing.km_target),
-    zone: zone != null ? String(zone).trim() : existing.zone ?? '',
-  }, WEEK_COLUMNS));
+    season_start,
+    content: existing.content ?? '',
+    km_target: kmValue(existing.km_target),
+    zone: existing.zone ?? '',
+    ...changed,
+  }, WEEK_COLUMNS);
+  return saveRow('plan_weeks', full, { send: { week_key: weekKey, season_start, ...changed } });
 }
 
 /**

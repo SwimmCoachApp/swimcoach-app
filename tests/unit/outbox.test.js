@@ -186,3 +186,16 @@ test("une file vidée n'écrit pas de liste vide : la clé outboxTeams est retir
   await flush(makeFakeClient(), 'A', 'T1');
   expect(localStorage.getItem('swimcoach2_A_outboxTeams')).toBeNull();
 });
+
+test('deux ops partielles de la même clé partent toutes les deux, dans l\'ordre, chacune avec ses colonnes', async () => {
+  enqueue({ table: 'plan_weeks', kind: 'upsert', row: { week_key: '2026-W47', season_start: 2026, zone: 'seuil' } });
+  enqueue({ table: 'plan_weeks', kind: 'upsert', row: { week_key: '2026-W47', season_start: 2026, km_target: 30 } });
+  expect(pendingCount()).toBe(2);
+  const client = makeFakeClient();
+  await flush(client, 'A');
+  expect(client.calls.map((c) => c.row)).toEqual([
+    { week_key: '2026-W47', season_start: 2026, zone: 'seuil', team_id: 'T1' },
+    { week_key: '2026-W47', season_start: 2026, km_target: 30, team_id: 'T1' },
+  ]);
+  expect(pendingCount()).toBe(0);
+});

@@ -1,8 +1,8 @@
 /**
  * Écran Planification : saison de septembre à août, événements du plan, semaines (zone, thème, objectif km), PDF.
  *
- * Plusieurs entraîneurs peuvent modifier la même semaine : chaque champ enregistre sa propre valeur (savePlanWeek
- * laisse les autres telles qu'elles sont dans le store). Les rafraîchissements du store (temps réel, séances)
+ * Plusieurs entraîneurs peuvent modifier la même semaine : l'écriture est faite champ par champ (savePlanWeek
+ * n'envoie au serveur que la colonne modifiée, jamais les autres champs de la semaine). Les rafraîchissements du store (temps réel, séances)
  * ne reconstruisent jamais les champs : ils ne remplacent que la valeur d'un champ qui n'a pas le focus, donc
  * ce qu'un entraîneur est en train de taper n'est jamais écrasé. La feuille d'événement est hors de la liste.
  */
@@ -104,10 +104,10 @@ on('plan-toggle-month', (btn) => {
 
 // ── Semaines : un champ modifié = une écriture de ce champ seul ──
 on('plan-week-change', (input) => {
-  const { week, season, field } = input.dataset;
+  const { week, field } = input.dataset;
   const value = input.value;
   try {
-    const saved = savePlanWeek(week, Number(season), field === 'theme' ? value : null, field === 'km' ? value : null, field === 'zone' ? value : null);
+    const saved = savePlanWeek(week, null, field === 'theme' ? value : null, field === 'km' ? value : null, field === 'zone' ? value : null);
     if (field === 'km') input.value = saved.km_target || ''; // valeur normalisée (virgule, négatif)
   } catch {
     toast('Enregistrement impossible');
@@ -136,6 +136,12 @@ on('plan-pick-type', (btn) => {
 on('plan-save-event', () => {
   const form = ui.form;
   if (!form) return;
+  if (form.id && !db.plan_events.has(form.id)) { // supprimé par un autre entraîneur : on ne le recrée pas
+    closeModal('modal-plan-event');
+    ui.form = null;
+    toast('Cet événement a été supprimé');
+    return;
+  }
   const title = el('plan-ev-title').value.trim();
   if (!title && form.type !== 'note') {
     toast('Titre requis');
@@ -165,11 +171,12 @@ on('plan-ask-delete-event', (btn) => {
   openModal('dialog-plan-event');
 });
 on('plan-do-delete-event', (btn) => {
-  deletePlanEvent(btn.dataset.id);
+  const gone = !db.plan_events.has(btn.dataset.id);
+  if (!gone) deletePlanEvent(btn.dataset.id);
   closeModal('dialog-plan-event');
   closeModal('modal-plan-event');
   ui.form = null;
-  toast('Événement supprimé');
+  toast(gone ? 'Cet événement a été supprimé' : 'Événement supprimé');
 });
 
 // ── PDF ──

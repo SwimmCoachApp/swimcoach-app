@@ -17,13 +17,17 @@ function scheduleFlush() {
 
 /**
  * Enregistre une ligne : store local, file d'attente, envoi.
+ * `send` permet une écriture champ par champ : le store garde la ligne entière, mais seules les colonnes de
+ * `send` (clé primaire comprise) partent au serveur, qui ne met à jour que celles-là (upsert PostgREST).
+ * Deux écritures partielles de la même ligne restent deux opérations, envoyées dans l'ordre.
  * @param {string} table
- * @param {object} row
+ * @param {object} row ligne complète, pour le store local
+ * @param {{send?: object}} [opts] send : colonnes à envoyer (par défaut, toute la ligne)
  * @returns {object} la ligne enregistrée localement
  */
-export function saveRow(table, row) {
+export function saveRow(table, row, { send } = {}) {
   const saved = upsertLocal(table, row);
-  enqueue({ table, kind: 'upsert', row: saved });
+  enqueue({ table, kind: 'upsert', row: send ?? saved });
   scheduleFlush();
   return saved;
 }
