@@ -9,7 +9,8 @@ Fichiers : `supabase/tests/database/`
 - `isolation.test.sql` : isolation entre espaces d'équipe (146 assertions). Il
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
 - `invite_code.test.sql` : activation par le code du club (27 assertions).
-- `teams.test.sql` : espaces, membres et invitations (70 assertions).
+- `teams.test.sql` : espaces, membres et invitations (80 assertions).
+- `storage.test.sql` : stockage privé des photos (32 assertions).
 
 Règle d'écriture : chaque assertion pgTAP commence **en début de ligne** par
 `select` (`select is(`, `select throws_ok(`, `select * from finish()`...). Le script
@@ -74,7 +75,7 @@ Des lignes de TA dans chaque table métier.
   publication temps réel, RLS sur toutes les tables, 34 politiques, aucun droit pour
   `anon`, pas de `TRUNCATE` pour `authenticated`, droits des fonctions `private`
   (aucune exécutable par PUBLIC ou `anon` ; par `authenticated`, seulement les deux
-  fonctions d'appartenance).
+  fonctions d'appartenance et `team_from_path`).
 - B (non-membre) : lecture, insertion, modification, suppression refusées sur les 7
   tables métier et sur `teams`, `team_members`, `team_invites`, `coaches` ; pas de
   `TRUNCATE` ; pas de déplacement vers TA ; pas de détournement par upsert
@@ -130,8 +131,48 @@ B est seul dans TB.
   - second appel → 0.
 - F (invité, non activé) : 0, puis `redeem_invite_code` le fait entrer dans TA.
 - G : invité, puis il crée son compte : `added`, et l'invitation est supprimée.
-- Limite : 20 appels acceptés, le 21e → `too_many_invites` ; à nouveau possible une
-  heure plus tard.
-- C retire A (A ne voit plus rien et ne peut plus inviter). F part de lui-même. Retirer
+- Compte SSO ou supprimé (`deleted_at`) → `invited`, jamais ajouté directement.
+- E (confirmé, non activé) → `added`, mais ne voit rien ; une fois activé, il lit TA.
+- Limite : une adresse invalide (refusée) ne compte pas ; 20 appels acceptés, le 21e →
+  `too_many_invites` ; à nouveau possible une heure plus tard.
+- C retire A (A ne voit plus rien, ne peut plus inviter, renommer, supprimer l'espace ni
+  retirer quelqu'un : `not_allowed`). F part de lui-même. Retirer
   un non-membre ne fait rien. Le dernier membre → `last_member`. `delete_team` efface
   tout en cascade ; TB est intacte.
+
+Non testable en une transaction : la course « membre retiré pendant qu'il agit ». Les
+RPC prennent le verrou sur la ligne `teams` avant de vérifier l'appartenance
+(`20261119144500_teams_hardening.sql`).
+
+## Ce que couvre storage.test.sql
+
+A et C activés, membres de TA ; E non activé mais inscrit dans TA ; B activé, seul dans
+TB. Les objets sont insérés directement dans `storage.objects` (`bucket_id, name, owner`).
+
+- Structure : bucket `photos` privé, 2 Mo, jpeg et webp ; 4 politiques `photos_*` pour
+  `authenticated` seulement ; `private.team_from_path` (UUID, `pasunuuid/...` → null,
+  pas de dossier → null ; exécutable par `authenticated`, pas par `anon`).
+- A dépose sous TA. Noms `pasunuuid/x.jpg` et `x.jpg` refusés (42501, pas d'erreur de
+  conversion) ; un objet au nom invalide (posé en `postgres`) est invisible, sans erreur.
+- C lit, remplace, supprime sous TA ; ne déplace pas vers TB (42501).
+- B : ne voit rien de TA, ne dépose pas sous TA, pas de remplacement par upsert
+  (`on conflict (id) do update` sur l'identifiant de la photo de TA → 42501), ne renomme
+  ni ne supprime (0 ligne) ; dépose sous TB et ne voit que cela. Contrôle `postgres` : la
+  photo de TA est intacte.
+- E non activé : ne dépose pas, ne voit rien. anon : ne voit rien, ne dépose rien.
+- Après le retrait de C (RPC), C ne lit plus et ne dépose plus.
+
+Suppression : `storage.objects` a un déclencheur (`protect_objects_delete`) qui refuse
+tout `DELETE` SQL direct sauf si `storage.allow_delete_query = 'true'`. Le test pose ce
+réglage (`set local`) pour que la politique `photos_delete` soit vraiment évaluée.
+
+## Avant la mise en service (checklist Supabase Auth)
+
+Détail et raisons : `docs/security-notes.md`, « Réglages obligatoires Supabase Auth ».
+
+- [ ] « Confirm email » activé (les invitations reposent sur `email_confirmed_at`).
+- [ ] « Secure email change » activé.
+- [ ] `db-tx-end=commit-allow-override` jamais activé (contournement des limites par
+      rollback).
+- [ ] Risque accepté et connu : `added` / `invited` révèle qu'une adresse a un compte
+      confirmé (entraîneurs activés seulement, 20 appels par heure).

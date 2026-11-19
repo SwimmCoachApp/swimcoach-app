@@ -2,8 +2,9 @@
 
 Contrôles Supabase lancés après les migrations `20261119140022_schema.sql`,
 `20261119140225_revoke_rls_auto_enable.sql`, `20261119140518_coaches_members_email_sync.sql`,
-`20261119141537_invite_code.sql`, `20261119141814_code_attempts_pk.sql` et
-`20261119142821_teams.sql`
+`20261119141537_invite_code.sql`, `20261119141814_code_attempts_pk.sql`,
+`20261119142821_teams.sql`, `20261119144207_storage.sql` et
+`20261119144500_teams_hardening.sql`
 (projet de développement, 19/11/2026). Les noms de fichiers reprennent la version
 enregistrée par le projet hébergé (`list_migrations`).
 
@@ -42,6 +43,57 @@ dans `public` reçoit bien la RLS). Second passage : aucune alerte.
 - INFO `rls_enabled_no_policy` sur `private.invite_log` : voulu (même règle que pour
   `club_invite` et `code_attempts`).
 
+## Tâche 5 (stockage des photos) et durcissement des RPC d'espace
+
+Aucune nouvelle alerte, ni sécurité ni performance. Les WARN sur les RPC d'espace et
+les INFO `rls_enabled_no_policy` restent ceux décrits plus haut (voulus).
+
+- Bucket `photos` privé (`public = false`), 2 Mo au plus (`file_size_limit = 2097152`),
+  `image/jpeg` et `image/webp` seulement. Chemins `<team_id>/swimmers/<id>.jpg` et
+  `<team_id>/sessions/<id>.jpg`.
+- 4 politiques sur `storage.objects` (`photos_select`, `photos_insert`, `photos_update`,
+  `photos_delete`), pour `authenticated` seulement :
+  `bucket_id = 'photos' and (select private.is_team_member(private.team_from_path(name)))`
+  (update : même règle en `using` et en `with check`, donc pas de déplacement vers un
+  autre espace). `anon` n'a aucune politique : il ne voit ni ne dépose rien.
+- `private.team_from_path(name)` : premier dossier du chemin converti en UUID s'il en a
+  la forme (regex), sinon `null`. Un nom comme `pasunuuid/x.jpg` rend la politique
+  fausse, jamais une erreur de conversion. Fonction `immutable`, pas `security definer`
+  (les politiques s'exécutent avec les droits de l'appelant), exécutable par
+  `authenticated` seulement.
+- Les politiques ne contrôlent pas le sous-dossier (`swimmers/`, `sessions/`) : un
+  membre peut déposer n'importe quel nom sous le dossier de son espace. Choix assumé :
+  la frontière de sécurité est l'espace.
+- Le déclencheur `protect_objects_delete` de Supabase refuse les `DELETE` SQL directs
+  sur `storage.objects` sauf si `storage.allow_delete_query = 'true'`. Ce réglage est
+  posable par n'importe quel rôle : c'est un garde-fou contre les fausses manœuvres,
+  pas une sécurité. La vraie protection est la politique `photos_delete`.
+- Durcissement (`teams_hardening`) : `rename_team`, `add_team_member`,
+  `remove_team_member` et `delete_team` prennent d'abord le verrou `for update` sur la
+  ligne `teams`, puis vérifient l'appartenance. Un membre en cours de retrait attend la
+  fin du retrait et la vérification qui suit le refuse (`not_allowed`).
+  `add_team_member` n'ajoute directement qu'un compte confirmé, ni supprimé
+  (`deleted_at is null`) ni SSO (`not is_sso_user`) ; sinon il crée une invitation.
+
+## Réglages obligatoires Supabase Auth
+
+À vérifier dans le tableau de bord (Authentication → Sign In / Providers → Email) sur
+chaque projet, avant toute mise en service :
+
+- **« Confirm email » activé** : obligatoire. La protection des invitations repose sur
+  `email_confirmed_at` (ajout direct et rattachement d'une invitation seulement pour une
+  adresse confirmée). Sans confirmation, n'importe qui pourrait s'inscrire avec
+  l'adresse d'un invité et prendre sa place.
+- **« Secure email change » activé** : le changement d'adresse doit être confirmé sur
+  l'ancienne et la nouvelle adresse.
+- **Ne jamais activer `db-tx-end=commit-allow-override`** (en-tête / réglage PostgREST) :
+  il permettrait à un client d'annuler sa transaction (rollback) après l'appel, donc
+  d'effacer les entrées de `invite_log` et `code_attempts` et de contourner les limites
+  d'essais.
+- Risque accepté : la réponse `added` ou `invited` de `add_team_member` révèle si une
+  adresse a un compte confirmé. Limité aux entraîneurs activés, membres d'un espace,
+  20 appels par heure.
+
 Performance, tâche 4 bis : aucune nouvelle alerte. `team_invites_email_idx` n'est plus
 signalé comme inutilisé : `claim_invites` s'en sert.
 
@@ -62,8 +114,9 @@ corrigé par `20261119141814_code_attempts_pk.sql` (identifiant technique).
 ## Choix à connaître
 
 - Schéma `private` non exposé par l'API (`config.toml` : `public`, `graphql_public`).
-  `authenticated` y a `usage` et le droit d'exécuter seulement `is_active_coach()` et
-  `is_team_member(uuid)` (les politiques s'exécutent avec les droits de l'appelant).
+  `authenticated` y a `usage` et le droit d'exécuter seulement `is_active_coach()`,
+  `is_team_member(uuid)` et `team_from_path(text)` (les politiques s'exécutent avec les
+  droits de l'appelant).
   `anon` n'a aucun droit sur ce schéma.
 - Fonctions `security definer` : `private.is_active_coach`, `private.is_team_member`,
   `private.handle_new_user` et `private.handle_user_email_change` (triggers sur `auth.users`). Toutes avec `search_path = ''`. Les fonctions
@@ -116,4 +169,5 @@ corrigé par `20261119141814_code_attempts_pk.sql` (identifiant technique).
   postgres (pgTAP dans les tests, par exemple). La garantie vient donc de chaque
   migration (`revoke all ... from public, anon` sur chaque fonction) et du test
   d'isolation qui liste les fonctions de `private` exécutables : aucune par PUBLIC ou
-  `anon`, et par `authenticated` seulement `is_active_coach` et `is_team_member`.
+  `anon`, et par `authenticated` seulement `is_active_coach`, `is_team_member` et
+  `team_from_path`.

@@ -5,7 +5,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 -- helpers:include
-select plan(70);
+select plan(80);
 
 create temp table ids (k text primary key, v uuid not null);
 grant select, insert on ids to public;
@@ -121,10 +121,27 @@ select tests.as_coach(pg_temp.id('a'));
 select is(public.add_team_member(pg_temp.id('ta'), 'g@club.fr'), 'added', 'G a maintenant un compte confirmé : ajouté');
 select is((select count(*) from public.team_invites where email = 'g@club.fr')::int, 0, 'l’invitation de G est remplacée par l’adhésion');
 
--- ---------------------------------------------------------------- limite : 20 appels par heure (3)
+-- ---------------------------------------------------------------- comptes SSO ou supprimés, compte non activé (5)
+reset role;
+insert into ids values ('s', tests.create_coach('sso@club.fr', true)), ('x', tests.create_coach('suppr@club.fr', true));
+update auth.users set is_sso_user = true where id = pg_temp.id('s');
+update auth.users set deleted_at = now() where id = pg_temp.id('x');
+select tests.as_coach(pg_temp.id('a'));
+select is(public.add_team_member(pg_temp.id('ta'), 'sso@club.fr'), 'invited', 'compte SSO : jamais ajouté directement');
+select is(public.add_team_member(pg_temp.id('ta'), 'suppr@club.fr'), 'invited', 'compte supprimé : jamais ajouté directement');
+select is(public.add_team_member(pg_temp.id('ta'), 'coach.e@club.fr'), 'added', 'E confirmé mais non activé : ajouté');
+select tests.as_coach(pg_temp.id('e'));
+select is((select count(*) from public.teams)::int, 0, 'E ajouté mais non activé ne voit rien');
+reset role;
+update public.coaches set activated_at = now() where id = pg_temp.id('e');
+select tests.as_coach(pg_temp.id('e'));
+select is((select count(*) from public.teams where id = pg_temp.id('ta'))::int, 1, 'E activé lit TA');
+
+-- ---------------------------------------------------------------- limite : 20 appels par heure (4)
 reset role;
 update private.invite_log set at = now() - interval '2 hours' where coach_id = pg_temp.id('a');
 select tests.as_coach(pg_temp.id('a'));
+select throws_ok($$select public.add_team_member(pg_temp.id('ta'), 'pas-une-adresse')$$, 'P0001', 'invalid_email', 'adresse invalide : refusée, sans compter dans la limite');
 select is((select count(*) from generate_series(1, 20) g where public.add_team_member(pg_temp.id('ta'), 'r' || g || '@club.fr') = 'invited')::int, 20, '20 appels dans l’heure acceptés');
 select throws_ok($$select public.add_team_member(pg_temp.id('ta'), 'r21@club.fr')$$, 'P0001', 'too_many_invites', '21e appel dans l’heure refusé');
 reset role;
@@ -132,7 +149,7 @@ update private.invite_log set at = now() - interval '61 minutes' where coach_id 
 select tests.as_coach(pg_temp.id('a'));
 select is(public.add_team_member(pg_temp.id('ta'), 'r21@club.fr'), 'invited', 'une heure plus tard, A peut de nouveau inviter');
 
--- ---------------------------------------------------------------- départs, dernier membre, suppression (15)
+-- ---------------------------------------------------------------- départs, dernier membre, suppression (19)
 reset role;
 insert into public.swimmers (team_id, firstname, joined_season) values (pg_temp.id('ta'), 'Léa', 2026);
 insert into public.sessions (team_id, date, type) values (pg_temp.id('ta'), '2026-11-19', 'nat');
@@ -141,12 +158,16 @@ select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id(
 select tests.as_coach(pg_temp.id('a'));
 select is((select count(*) from public.swimmers)::int, 0, 'A retiré ne voit plus rien de TA');
 select throws_ok($$select public.add_team_member(pg_temp.id('ta'), 'x@club.fr')$$, 'P0001', 'not_allowed', 'A retiré ne peut plus inviter');
+select throws_ok($$select public.rename_team(pg_temp.id('ta'), 'pirate')$$, 'P0001', 'not_allowed', 'A retiré ne renomme plus TA');
+select throws_ok($$select public.delete_team(pg_temp.id('ta'))$$, 'P0001', 'not_allowed', 'A retiré ne supprime plus TA');
+select throws_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('c'))$$, 'P0001', 'not_allowed', 'A retiré ne retire plus personne');
 select tests.as_coach(pg_temp.id('f'));
 select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('f'))$$, 'F quitte TA de lui-même');
 select is((select count(*) from public.teams)::int, 0, 'F ne voit plus TA');
 select tests.as_coach(pg_temp.id('c'));
 select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('d'))$$, 'C retire D');
 select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('g'))$$, 'C retire G');
+select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('e'))$$, 'C retire E');
 select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('b'))$$, 'retirer un non-membre : sans effet');
 select is((select count(*) from public.team_members where team_id = pg_temp.id('ta'))::int, 1, 'C est seul dans TA');
 select throws_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('c'))$$, 'P0001', 'last_member', 'le dernier membre ne peut pas partir');
