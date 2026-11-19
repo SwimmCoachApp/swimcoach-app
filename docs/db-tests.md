@@ -149,7 +149,7 @@ RPC prennent le verrou sur la ligne `teams` avant de vérifier l'appartenance
 A et C activés, membres de TA ; E non activé mais inscrit dans TA ; B activé, seul dans
 TB. Les objets sont insérés directement dans `storage.objects` (`bucket_id, name, owner`).
 
-- Structure : bucket `photos` privé, 2 Mo, jpeg et webp ; 4 politiques `photos_*` pour
+- Structure : bucket `photos` privé, 2 Mo, jpeg seulement (`photos_jpeg_only`) ; 4 politiques `photos_*` pour
   `authenticated` seulement ; `private.team_from_path` (UUID, `pasunuuid/...` → null,
   pas de dossier → null ; exécutable par `authenticated`, pas par `anon`).
 - A dépose sous TA. Noms `pasunuuid/x.jpg` et `x.jpg` refusés (42501, pas d'erreur de

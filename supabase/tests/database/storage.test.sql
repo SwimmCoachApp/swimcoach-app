@@ -40,7 +40,7 @@ set local storage.allow_delete_query = 'true';
 -- ---------------------------------------------------------------- structure (8)
 select is((select public from storage.buckets where id = 'photos'), false, 'bucket photos privé');
 select is((select file_size_limit from storage.buckets where id = 'photos'), 2097152::bigint, 'taille maximale 2 Mo');
-select is((select allowed_mime_types from storage.buckets where id = 'photos'), '{image/jpeg,image/webp}'::text[], 'types acceptés : jpeg et webp');
+select is((select allowed_mime_types from storage.buckets where id = 'photos'), '{image/jpeg}'::text[], 'type accepté : jpeg seulement (noms en .jpg)');
 select is((select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects'
            and policyname like 'photos\_%' and roles = '{authenticated}')::int, 4, '4 politiques photos, pour authenticated seulement');
 select is(private.team_from_path(pg_temp.ph('ta', 'swimmers', 'fx')), pg_temp.id('ta'), 'team_from_path : premier dossier = espace');

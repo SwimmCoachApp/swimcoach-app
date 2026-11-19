@@ -49,8 +49,9 @@ Aucune nouvelle alerte, ni sécurité ni performance. Les WARN sur les RPC d'esp
 les INFO `rls_enabled_no_policy` restent ceux décrits plus haut (voulus).
 
 - Bucket `photos` privé (`public = false`), 2 Mo au plus (`file_size_limit = 2097152`),
-  `image/jpeg` et `image/webp` seulement. Chemins `<team_id>/swimmers/<id>.jpg` et
-  `<team_id>/sessions/<id>.jpg`.
+  `image/jpeg` seulement (migration `photos_jpeg_only` ; webp retiré). Chemins
+  `<team_id>/swimmers/<uuid>.jpg` et `<team_id>/sessions/<uuid>.jpg`, imposés au dépôt et
+  au remplacement par `storage_strict_names` (UUID en minuscules, extension `.jpg`).
 - 4 politiques sur `storage.objects` (`photos_select`, `photos_insert`, `photos_update`,
   `photos_delete`), pour `authenticated` seulement :
   `bucket_id = 'photos' and (select private.is_team_member(private.team_from_path(name)))`
