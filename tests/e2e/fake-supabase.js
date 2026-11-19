@@ -5,9 +5,10 @@
 //   fake.state.tables.swimmers   // lignes en mémoire
 //   fake.callsTo('/auth/v1/recover')
 //
-// `target` peut être une page ou un contexte : avec un contexte, plusieurs pages (plusieurs
-// entraîneurs) partagent le même état. L'isolation imite la RLS : un entraîneur activé ne lit
-// et n'écrit que les lignes des espaces dont il est membre.
+// `target` peut être une page, un contexte ou une liste de pages / contextes : tous partagent alors
+// le même état (deux contextes = deux appareils, chacun avec son propre stockage local).
+// L'isolation imite la RLS : un entraîneur activé ne lit et n'écrit que les lignes des espaces
+// dont il est membre.
 import { randomUUID } from 'node:crypto';
 import { SUPABASE_PUBLISHABLE_KEY } from '../../src/core/config.js';
 
@@ -34,7 +35,7 @@ const rpcError = (message) => pgError(400, 'P0001', message);
 const authError = (status, errorCode, msg) => new HttpError(status, { code: status, error_code: errorCode, msg });
 
 /**
- * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext} target
+ * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext | Array<import('@playwright/test').Page | import('@playwright/test').BrowserContext>} target
  * @param {{users?: object[], teams?: object[], members?: object[], tables?: object, clubCode?: string,
  *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number}} [opts]
  *   users : {email, password, activated?, id?, confirmed?} ; teams : {id?, name} ;
@@ -562,13 +563,15 @@ export async function installFakeSupabase(target, opts = {}) {
     });
   };
 
-  await target.route('**/auth/v1/**', dispatch('auth'));
-  await target.route('**/rest/v1/**', dispatch('rest'));
-  await target.route('**/storage/v1/**', dispatch('storage'));
-  await target.route('**/functions/v1/**', dispatch('functions'));
-  // Temps réel neutralisé : le websocket s'ouvre mais le serveur ne répond jamais.
-  if (typeof target.routeWebSocket === 'function') {
-    await target.routeWebSocket(/\/realtime\/v1\//, () => {});
+  for (const t of Array.isArray(target) ? target : [target]) {
+    await t.route('**/auth/v1/**', dispatch('auth'));
+    await t.route('**/rest/v1/**', dispatch('rest'));
+    await t.route('**/storage/v1/**', dispatch('storage'));
+    await t.route('**/functions/v1/**', dispatch('functions'));
+    // Temps réel neutralisé : le websocket s'ouvre mais le serveur ne répond jamais.
+    if (typeof t.routeWebSocket === 'function') {
+      await t.routeWebSocket(/\/realtime\/v1\//, () => {});
+    }
   }
 
   return {
