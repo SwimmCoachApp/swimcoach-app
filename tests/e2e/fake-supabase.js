@@ -53,9 +53,12 @@ export async function installFakeSupabase(target, opts = {}) {
     tokenTtl: opts.tokenTtl ?? TOKEN_TTL,
     attempts: {},
     refreshTokens: new Map(),
+    signedTokens: new Map(),
+    offline: false, // vrai : toute requête est coupée comme si le réseau était absent
   };
   const calls = [];
   const T = state.tables;
+  state.photos = new Map(); // objets du bucket photos : chemin -> {data, mime, size}
 
   // ------------------------------------------------------------ comptes
   function addUser({ email, password = 'motdepasse-long', activated = false, id = randomUUID(), confirmed = true }) {
@@ -423,12 +426,86 @@ export async function installFakeSupabase(target, opts = {}) {
     return handleTable({ ...req, table: sub });
   }
 
-  // Stubs : les tâches suivantes étendent le faux (stockage des photos, fonction liveffn-proxy).
-  function handleStorage(req) {
-    if (req.method === 'GET' || req.method === 'HEAD') {
-      return { status: 404, body: { statusCode: '404', error: 'not_found', message: 'Object not found' } };
+  // ------------------------------------------------------------ stockage (bucket privé « photos »)
+  // Fidèle à la base : nom <équipe>/(swimmers|sessions)/<uuid>.jpg en minuscules, jpeg seulement, 2 Mo au plus,
+  // accès réservé aux membres de l'équipe du chemin. Une URL signée se lit sans clé ni jeton, seulement avec son token.
+  const PHOTO_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(swimmers|sessions)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/;
+  const MAX_PHOTO = 2 * 1024 * 1024;
+  const storageError = (status, error, message) => new HttpError(status, { statusCode: String(status), error, message });
+  const storageRls = () => storageError(403, 'Unauthorized', 'new row violates row-level security policy');
+  const teamOfPath = (path) => path.split('/')[0];
+  const decodePath = (p) => decodeURIComponent(p);
+
+  function parseUpload(req) {
+    const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(req.headers['content-type'] || '');
+    const buf = req.raw;
+    if (!boundary || !buf) {
+      return { mime: (req.headers['content-type'] || '').split(';')[0], data: buf ?? Buffer.alloc(0) };
     }
-    return { body: {} };
+    const sep = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+    let at = buf.indexOf(sep);
+    while (at !== -1) {
+      const next = buf.indexOf(sep, at + sep.length);
+      if (next === -1) break;
+      const part = buf.subarray(at + sep.length + 2, next - 2); // sans CRLF autour
+      const headEnd = part.indexOf('\r\n\r\n');
+      const head = part.subarray(0, headEnd).toString('latin1');
+      if (/filename=/i.test(head)) {
+        return { mime: (/content-type:\s*([^\r\n]+)/i.exec(head)?.[1] ?? '').trim(), data: part.subarray(headEnd + 4) };
+      }
+      at = next;
+    }
+    return { mime: '', data: Buffer.alloc(0) };
+  }
+
+  function handleStorage(req) {
+    const { method, headers } = req;
+    const sub = req.path.replace(/^\/storage\/v1/, '');
+    const signed = /^\/object\/sign\/photos\/(.+)$/.exec(sub);
+    if (signed && method === 'GET') {
+      const path = decodePath(signed[1]);
+      const token = req.query.get('token') || '';
+      const obj = state.photos.get(path);
+      const grant = state.signedTokens.get(token);
+      if (!grant || grant.path !== path || grant.exp < Date.now() || !obj) throw storageError(400, 'InvalidJWT', 'Invalid token');
+      return { status: 200, raw: obj.data, contentType: obj.mime };
+    }
+    const user = authedUser(headers, { required: false });
+    const mine = user ? teamIdsOf(user.id) : new Set();
+    const upload = /^\/object\/photos\/(.+)$/.exec(sub);
+    if (upload && (method === 'POST' || method === 'PUT')) {
+      const path = decodePath(upload[1]);
+      if (!user || !mine.has(teamOfPath(path))) throw storageRls();
+      if (!PHOTO_NAME.test(path)) throw storageRls();
+      const { mime, data } = parseUpload(req);
+      if (mime !== 'image/jpeg') throw storageError(415, 'InvalidMimeType', 'mime type ' + mime + ' is not supported');
+      if (data.length > MAX_PHOTO) throw storageError(413, 'Payload too large', 'The object exceeded the maximum allowed size');
+      const exists = state.photos.has(path);
+      if (exists && !/^true$/i.test(headers['x-upsert'] || '')) throw storageError(409, 'Duplicate', 'The resource already exists');
+      state.photos.set(path, { data, mime, size: data.length });
+      return { body: { Key: `photos/${path}`, Id: randomUUID() } };
+    }
+    const sign = /^\/object\/sign\/photos\/(.+)$/.exec(sub);
+    if (sign && method === 'POST') {
+      const path = decodePath(sign[1]);
+      if (!user || !mine.has(teamOfPath(path))) throw storageRls();
+      if (!state.photos.has(path)) throw storageError(404, 'not_found', 'Object not found');
+      const ttl = Number(req.body?.expiresIn ?? 0);
+      if (!(ttl > 0)) throw storageError(400, 'InvalidRequest', 'expiresIn required');
+      const token = randomUUID();
+      state.signedTokens.set(token, { path, exp: Date.now() + ttl * 1000 });
+      return { body: { signedURL: `/object/sign/photos/${path}?token=${token}` } };
+    }
+    if (method === 'DELETE' && sub === '/object/photos') {
+      if (!user) throw storageRls();
+      const removed = [];
+      for (const path of req.body?.prefixes ?? []) {
+        if (!mine.has(teamOfPath(path))) continue; // la politique ne voit pas les autres équipes
+        if (state.photos.delete(path)) removed.push({ name: path, bucket_id: 'photos' });
+      }
+      return { body: removed };
+    }
+    throw storageError(404, 'not_found', `fake: route stockage inconnue ${method} ${sub}`);
   }
   const handleFunctions = () => ({ body: {} });
 
@@ -442,11 +519,16 @@ export async function installFakeSupabase(target, opts = {}) {
   const dispatch = (kind) => async (route) => {
     const request = route.request();
     const headers = request.headers();
+    if (state.offline) {
+      await route.abort('internetdisconnected');
+      return;
+    }
     if (request.method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: cors(headers) });
       return;
     }
-    if (headers.apikey !== SUPABASE_PUBLISHABLE_KEY) {
+    const isSignedRead = request.method() === 'GET' && /\/storage\/v1\/object\/sign\/photos\//.test(request.url());
+    if (!isSignedRead && headers.apikey !== SUPABASE_PUBLISHABLE_KEY) {
       await route.fulfill({
         status: 401,
         headers: { ...cors(headers), 'content-type': 'application/json' },
@@ -457,7 +539,7 @@ export async function installFakeSupabase(target, opts = {}) {
     const url = new URL(request.url());
     let body = null;
     try { body = request.postDataJSON(); } catch { body = null; }
-    const req = { method: request.method(), path: url.pathname, query: url.searchParams, search: url.search, body, headers };
+    const req = { method: request.method(), path: url.pathname, query: url.searchParams, search: url.search, body, headers, raw: request.postDataBuffer() };
     let user = null;
     try { user = authedUser(headers, { required: false }); } catch { /* jeton invalide : journalisé sans entraîneur */ }
     calls.push({ method: req.method, path: req.path, search: req.search, body, userId: user?.id ?? null });
@@ -467,6 +549,10 @@ export async function installFakeSupabase(target, opts = {}) {
     } catch (e) {
       if (!(e instanceof HttpError)) throw e;
       res = { status: e.status, headers: {}, body: e.body };
+    }
+    if (res.raw) {
+      await route.fulfill({ status: res.status, headers: { ...cors(headers), 'content-type': res.contentType }, body: res.raw });
+      return;
     }
     const payload = res.body === null || res.body === undefined ? '' : JSON.stringify(res.body);
     await route.fulfill({

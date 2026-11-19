@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "TZ=Europe/Paris vitest run",
     "test:e2e": "playwright test",
     "guards": "node scripts/check-guards.mjs"
   },

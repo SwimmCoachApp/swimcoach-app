@@ -19,6 +19,7 @@ export const db = Object.fromEntries(TABLES.map((t) => [t, new Map()]));
 let ctx = null;
 let saveTimer = null;
 const listeners = new Map(TABLES.map((t) => [t, new Set()]));
+const resetListeners = new Set();
 
 /**
  * Clé locale d'une ligne.
@@ -155,6 +156,15 @@ export function subscribe(table, cb) {
 }
 
 /**
+ * @param {() => void} cb appelé à chaque fermeture de l'espace (changement d'espace, d'entraîneur, déconnexion)
+ * @returns {() => void} désabonnement
+ */
+export function onReset(cb) {
+  resetListeners.add(cb);
+  return () => resetListeners.delete(cb);
+}
+
+/**
  * Vide le cache en mémoire (changement d'espace ou d'entraîneur).
  * @param {{save?: boolean}} [opts] save : écrit d'abord la sauvegarde en attente (faux après effacement des données)
  */
@@ -165,6 +175,7 @@ export function resetStore({ save = true } = {}) {
     if (save && ctx) writeCache(ctx);
   }
   ctx = null;
+  for (const cb of [...resetListeners]) cb();
   for (const t of TABLES) {
     if (db[t].size === 0) continue;
     db[t].clear();
