@@ -6,7 +6,19 @@ import { fileURLToPath } from 'node:url';
 const FORBIDDEN_PROJECT = /aijgczmszymfjkeegbjz|vijexmmydvgfpkyzkgls/;
 const SECRET_SRC = /service_role|sb_secret_/;
 const SECRET_DIST = /sb_secret_/;
-const INLINE_HANDLER = /\son[a-z]+=/;
+const EVENTS = [
+  'click', 'dblclick', 'auxclick', 'contextmenu', 'input', 'change', 'submit', 'reset', 'invalid', 'select',
+  'keydown', 'keyup', 'keypress', 'load', 'error', 'abort', 'unload', 'beforeunload', 'resize', 'scroll',
+  'focus', 'blur', 'focusin', 'focusout', 'wheel', 'drag', 'dragstart', 'dragend', 'dragenter', 'dragleave',
+  'dragover', 'drop', 'copy', 'cut', 'paste', 'toggle', 'play', 'pause', 'ended',
+  'mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout', 'mouseenter', 'mouseleave',
+  'touchstart', 'touchend', 'touchmove', 'touchcancel',
+  'pointerdown', 'pointerup', 'pointermove', 'pointerover', 'pointerout', 'pointerenter', 'pointerleave',
+  'pointercancel', 'gotpointercapture', 'lostpointercapture',
+].join('|');
+const INLINE_HANDLER = new RegExp(`(^|[\\s"'\`<])on(${EVENTS})\\s*=`, 'i');
+const LEGACY_KEY = /swimcoach_v2|swimcoach_theme|__app_version__/;
+const LS_CLEAR = /localStorage\s*\.\s*clear\s*\(/;
 const STORAGE_FILE = 'src/core/storage.js';
 
 const norm = (p) => p.replace(/\\/g, '/');
@@ -26,9 +38,10 @@ export function checkGuards(files, { mode = 'src' } = {}) {
     f.text.split('\n').forEach((line, i) => {
       const n = i + 1;
       if (FORBIDDEN_PROJECT.test(line)) out.push({ path, rule: 'forbidden-project', line: n });
-      if (!dist && path !== STORAGE_FILE && /localStorage/.test(line)) {
+      if (!dist && (LS_CLEAR.test(line) || (path !== STORAGE_FILE && /localStorage/.test(line)))) {
         out.push({ path, rule: 'raw-localstorage', line: n });
       }
+      if (!dist && LEGACY_KEY.test(line)) out.push({ path, rule: 'legacy-key', line: n });
       if ((dist ? SECRET_DIST : SECRET_SRC).test(line)) out.push({ path, rule: 'secret-key', line: n });
       if (!dist && inSrc && INLINE_HANDLER.test(line)) out.push({ path, rule: 'inline-handler', line: n });
     });
@@ -47,18 +60,37 @@ function walk(target, root, acc) {
   return acc;
 }
 
-function main() {
-  const root = process.cwd();
-  const dist = process.argv[2] === 'dist';
+/** Parcourt les cibles ; échoue (error) si l'argument est inconnu ou si une cible manque / 0 fichier. */
+export function runGuards(root, args) {
+  if (args.length > 1 || (args.length === 1 && args[0] !== 'dist')) {
+    return { error: `argument inconnu : ${args.join(' ')} (attendu : aucun ou "dist")`, violations: [], files: [] };
+  }
+  const dist = args[0] === 'dist';
   const targets = dist ? ['dist'] : ['src', 'public', 'supabase', 'index.html'];
+  const missing = targets.filter((t) => !existsSync(resolve(root, t)));
+  if (missing.length && dist) {
+    return { error: `cible introuvable : ${missing.join(', ')} (lancer "npm run build" d'abord)`, violations: [], files: [] };
+  }
   const files = targets.flatMap((t) => walk(resolve(root, t), root, []));
-  const violations = checkGuards(files, { mode: dist ? 'dist' : 'src' });
+  if (files.length === 0) {
+    return { error: `aucun fichier à analyser dans : ${targets.join(' ')}`, violations: [], files };
+  }
+  return { error: null, violations: checkGuards(files, { mode: dist ? 'dist' : 'src' }), files };
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const { error, violations, files } = runGuards(process.cwd(), args);
+  if (error) {
+    console.error(`check-guards : ${error}`);
+    process.exit(1);
+  }
   for (const v of violations) console.error(`${v.path}:${v.line}  [${v.rule}]`);
   if (violations.length) {
     console.error(`${violations.length} violation(s)`);
     process.exit(1);
   }
-  console.log(`check-guards (${dist ? 'dist' : 'src'}) : OK, ${files.length} fichier(s)`);
+  console.log(`check-guards (${args[0] === 'dist' ? 'dist' : 'src'}) : OK, ${files.length} fichier(s)`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
