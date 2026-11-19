@@ -49,7 +49,8 @@ test('(b) compte non activé : code du club, puis création de l’espace, puis 
   await page.getByLabel("Nom de l'espace").fill('TOAC Natation');
   await page.getByRole('button', { name: 'Créer' }).click();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
-  await expect(page.locator('[data-screen="calendar"]')).toContainText('TOAC Natation');
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText('TOAC Natation');
   expect(fake.state.tables.teams.map((t) => t.name)).toEqual(['TOAC Natation']);
 });
 
@@ -63,7 +64,8 @@ test('(c) un compte invité arrive directement sur le calendrier de l’espace',
   await login(page, 'invite@toac.fr');
   await page.getByLabel('Code du club').fill(fake.state.clubCode);
   await page.getByRole('button', { name: 'Valider' }).click();
-  await expect(page.locator('[data-screen="calendar"]')).toContainText('Pôle Formation');
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText('Pôle Formation');
 });
 
 test('(c bis) une invitation en attente est réclamée à l’activation', async ({ page }) => {
@@ -76,7 +78,8 @@ test('(c bis) une invitation en attente est réclamée à l’activation', async
   await login(page, 'tardif@toac.fr');
   await page.getByLabel('Code du club').fill(fake.state.clubCode);
   await page.getByRole('button', { name: 'Valider' }).click();
-  await expect(page.locator('[data-screen="calendar"]')).toContainText('Espace du collègue');
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText('Espace du collègue');
 });
 
 test('(d) trop d’essais : le message s’affiche', async ({ page }) => {
@@ -167,7 +170,8 @@ test('(g) une session existante rouvre l’app sans reconnexion', async ({ page 
     }
   }, [session, session.user.id, '66666666-6666-4666-8666-666666666666']);
   await page.goto('/');
-  await expect(page.locator('[data-screen="calendar"]')).toContainText('Autre');
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText('Autre');
 });
 
 test('(h) une requête sans clé apikey reçoit 401', async ({ page }) => {
@@ -199,7 +203,8 @@ test('(i) l’espace mémorisé dont on n’est plus membre : ouvre le premier e
     }
   }, [session, session.user.id]);
   await page.goto('/');
-  await expect(page.locator('[data-screen="calendar"]')).toContainText('Seul espace');
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText('Seul espace');
   const stored = await page.evaluate((id) => localStorage.getItem(`swimcoach2_${id}_team`), session.user.id);
   expect(JSON.parse(stored)).toBe(teamId);
 });
@@ -213,9 +218,10 @@ test('(j) XSS : nom d’espace et e-mail s’affichent comme du texte', async ({
   await expect(page.locator('[data-screen="create-team"] strong')).toHaveText('coach@toac.fr');
   await page.getByLabel("Nom de l'espace").fill(evil);
   await page.getByRole('button', { name: 'Créer' }).click();
-  await expect(page.locator('[data-screen="calendar"]')).toContainText(evil);
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText(evil);
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
-  expect(await page.locator('[data-screen="calendar"] img').count()).toBe(0);
+  expect(await page.locator('[data-screen="calendar"] img, [data-team-name] img').count()).toBe(0);
 });
 
 test('(j bis) XSS : un e-mail piégé reste du texte sur l’écran du code', async ({ page }) => {

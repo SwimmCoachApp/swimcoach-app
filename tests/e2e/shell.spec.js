@@ -75,7 +75,8 @@ test('double changement A → B → A pendant le chargement : l’espace final e
   await page.getByRole('button', { name: 'Alpha' }).click();
   await expect(page.locator('.top-bar-team')).toContainText('Alpha');
   release();
-  await expect(page.locator('[data-screen="calendar"]')).toContainText('Alpha');
+  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(page.locator('[data-team-name]')).toContainText('Alpha');
   await expect(page.locator('.top-bar-team')).toContainText('Alpha');
 });
 

@@ -9,6 +9,7 @@ import '@fontsource/inter/latin-800.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/contacts.css'; // avant club.css : l'habillage Club surcharge les bases
+import './styles/calendar.css';
 import './styles/club.css';
 import './styles/auth.css';
 import { initSession, getCoach, onCoachChange, onPasswordRecovery, isRecovering, configureSession } from './core/session.js';
@@ -21,6 +22,7 @@ import { showCreateTeam } from './features/teams/picker.js';
 import { startApp } from './app/shell.js';
 import { registerPlaceholderScreens } from './app/screens.js';
 import { registerContactsScreen } from './features/contacts/index.js';
+import { registerCalendarScreen } from './features/calendar/index.js';
 import { initTheme } from './app/theme.js';
 import { toast } from './app/toast.js';
 import { initUpdate } from './app/update.js';
@@ -35,6 +37,7 @@ configureSync({ toast, onTeamLost: () => route(), onSynced: ensureDefaultGroups 
 initTheme();
 registerPlaceholderScreens();
 registerContactsScreen();
+registerCalendarScreen();
 initUpdate();
 
 /** Garde de démarrage : choisit l'écran selon la session, l'activation et les espaces. */
