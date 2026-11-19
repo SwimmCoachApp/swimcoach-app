@@ -6,8 +6,9 @@ Fichiers : `supabase/tests/database/`
   (`tests.create_coach(email, activé)`, `tests.create_team(nom, membres)`,
   `tests.as_coach(id)`). C'est aussi un fichier pgTAP valide (3 assertions).
   La partie utile est entre les marqueurs `-- helpers:start` et `-- helpers:end`.
-- `isolation.test.sql` : isolation entre espaces d'équipe (142 assertions). Il
+- `isolation.test.sql` : isolation entre espaces d'équipe (146 assertions). Il
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
+- `invite_code.test.sql` : activation par le code du club (27 assertions).
 
 Règle d'écriture : chaque assertion pgTAP commence **en début de ligne** par
 `select` (`select is(`, `select throws_ok(`, `select * from finish()`...). Le script
@@ -51,7 +52,7 @@ Le script :
    `00_helpers.sql`), `select string_agg(line, E'\n' order by n) as tap from pg_temp.tap_out;`.
 
 On envoie le contenu produit avec `execute_sql` : le résultat est la sortie TAP
-complète (`1..142`, puis `ok 1 - ...`). Si une instruction hors assertion échoue
+complète (`1..146`, puis `ok 1 - ...`). Si une instruction hors assertion échoue
 (table absente, par exemple), toute la requête échoue et la transaction est annulée.
 
 Après un passage, vérifier qu'il ne reste rien :
@@ -70,17 +71,36 @@ Des lignes de TA dans chaque table métier.
 - Structure : trigger `on_auth_user_created` (e-mail en minuscules, compte inactif),
   synchro de `coaches.email` quand l'e-mail du compte change,
   publication temps réel, RLS sur toutes les tables, 34 politiques, aucun droit pour
-  `anon`, pas de `TRUNCATE` pour `authenticated`, droits des fonctions `private`.
+  `anon`, pas de `TRUNCATE` pour `authenticated`, droits des fonctions `private`
+  (aucune exécutable par PUBLIC ou `anon` ; par `authenticated`, seulement les deux
+  fonctions d'appartenance).
 - B (non-membre) : lecture, insertion, modification, suppression refusées sur les 7
   tables métier et sur `teams`, `team_members`, `team_invites`, `coaches` ; pas de
-  `TRUNCATE` ; pas de déplacement vers TA ; clés composites (présence, perf, groupe).
+  `TRUNCATE` ; pas de déplacement vers TA ; pas de détournement par upsert
+  (`on conflict (id) do update` sur un nageur de TA) ; clés composites (présence, perf,
+  groupe).
   Contrôle en `postgres` ensuite : TA est intacte.
 - E (membre non activé) : ne voit rien, n'écrit rien ; voit seulement sa ligne `coaches`.
 - C (membre activé) : voit tous les membres de TA dans `coaches` (A, E et lui) ;
   lit, crée, modifie, supprime dans les 7 tables métier ;
-  `updated_by`, `updated_at` qui ne recule pas, renommage de l'espace (et nom vide
+  `updated_by`, `updated_at` = heure du serveur (date ancienne ou future envoyée par le
+  client ignorée), renommage de l'espace (et nom vide
   refusé), `display_name` seul modifiable ; aucune écriture directe sur
   `teams`/`team_members`/`team_invites`.
 - D (membre des deux espaces) : le trigger `forbid_team_change` refuse le changement
   de `team_id` même quand les deux espaces sont accessibles.
 - anon : aucun accès (erreur `42501`).
+
+## Ce que couvre invite_code.test.sql
+
+C et D : comptes confirmés, non activés.
+
+- Droits : `redeem_invite_code` pour `authenticated` seulement (ni `anon` ni PUBLIC) ;
+  `set_invite_code` et `claim_invites` non exécutables par les clients ; RLS et aucun
+  droit client sur `private.club_invite` et `private.code_attempts`.
+- Code stocké haché (bcrypt), une seule ligne (le nouveau code remplace l'ancien).
+- C : mauvais code → `false` ; bon code avec espaces et minuscules → `true`, compte
+  activé ; compte déjà activé → `true` sans nouvel essai.
+- D : 5 mauvais essais, le 6e (bon code) → `too_many_attempts`, non enregistré ; une
+  heure plus tard, D peut réessayer et s'active.
+- Sans identifiant de compte → `not_allowed` ; `anon` → `42501`.

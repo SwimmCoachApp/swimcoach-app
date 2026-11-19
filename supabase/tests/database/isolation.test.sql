@@ -6,7 +6,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 -- helpers:include
-select plan(142);
+select plan(146);
 
 create temp table ids (k text primary key, v uuid not null);
 grant select on ids to public;
@@ -50,7 +50,7 @@ insert into public.performances (id, team_id, swimmer_id, competition_id, event_
 insert into public.team_invites (team_id, email, invited_by) values
   (pg_temp.id('ta'), 'invite@example.test', pg_temp.id('a'));
 
--- ---------------------------------------------------------------- structure (13)
+-- ---------------------------------------------------------------- structure (14)
 select is((select count(*) from public.coaches)::int, 4, 'le trigger crée une ligne coaches par compte');
 select is((select email from public.coaches where id = pg_temp.id('c')), 'coach.c@example.test', 'e-mail recopié en minuscules');
 select ok((select activated_at is null from public.coaches where id = pg_temp.id('e')), 'un nouveau compte est inactif');
@@ -71,10 +71,16 @@ select ok(not has_function_privilege('authenticated', 'private.handle_new_user()
           and not has_function_privilege('authenticated', 'private.set_updated_at()', 'execute')
           and not has_function_privilege('authenticated', 'private.handle_user_email_change()', 'execute'), 'les fonctions de trigger ne sont pas exécutables par les clients');
 select ok(not has_schema_privilege('anon', 'private', 'usage'), 'anon n’a pas accès au schéma private');
+select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+           where p.pronamespace = 'private'::regnamespace
+             and (has_function_privilege('anon', p.oid, 'execute')
+                  or has_function_privilege('authenticated', p.oid, 'execute')
+                  or exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0))),
+          'is_active_coach,is_team_member', 'fonctions private : aucune pour PUBLIC ni anon, authenticated seulement les deux d’appartenance');
 update auth.users set email = 'Nouveau.A@Example.TEST' where id = pg_temp.id('a');
 select is((select email from public.coaches where id = pg_temp.id('a')), 'nouveau.a@example.test', 'coaches.email suit le changement d’e-mail du compte (minuscules)');
 
--- ---------------------------------------------------------------- B, non-membre de TA (51)
+-- ---------------------------------------------------------------- B, non-membre de TA (52)
 select tests.as_coach(pg_temp.id('b'));
 select is(private.is_team_member(pg_temp.id('ta')), false, 'B n’est pas membre de TA');
 select is((select count(*) from public.swimmers where team_id = pg_temp.id('tb'))::int, 1, 'B lit les nageurs de son espace TB');
@@ -115,6 +121,7 @@ select is_empty($$update public.coaches set display_name='pirate' where id=pg_te
 select throws_ok($$update public.coaches set activated_at=now() where id=pg_temp.id('b')$$, '42501', null, 'activated_at non modifiable');
 select throws_ok($$update public.team_members set added_by=pg_temp.id('b') where team_id=pg_temp.id('ta')$$, '42501', null, 'B ne modifie pas les membres de TA');
 select throws_ok($$update public.swimmers set team_id=pg_temp.id('ta') where team_id=pg_temp.id('tb')$$, '42501', null, 'B ne déplace pas une ligne vers TA');
+select throws_ok($$insert into public.swimmers(id,team_id,firstname,joined_season) values (pg_temp.id('sa1'), pg_temp.id('tb'), 'pirate', 2026) on conflict (id) do update set firstname='pirate', team_id=pg_temp.id('tb')$$, '42501', null, 'B ne détourne pas un nageur de TA par upsert (on conflict do update)');
 -- suppression
 select is_empty($$delete from public.sessions where team_id=pg_temp.id('ta') returning 1$$, 'B ne supprime rien dans TA');
 select is_empty($$delete from public.swimmers where team_id=pg_temp.id('ta') returning 1$$, 'B ne supprime pas les nageurs de TA');
@@ -133,7 +140,7 @@ select throws_ok($$insert into public.presence(team_id, session_id, swimmer_id) 
 select throws_ok($$insert into public.performances(id,team_id,swimmer_id,competition_id,event_code) values (gen_random_uuid(),pg_temp.id('tb'),pg_temp.id('sa1'),'1','1')$$, '23503', null, 'pas de perf de TB sur un nageur de TA');
 select throws_ok($$insert into public.swimmers(id,team_id,firstname,group_id,joined_season) values (gen_random_uuid(),pg_temp.id('tb'),'x',pg_temp.id('ga'),2026)$$, '23503', null, 'pas de nageur de TB dans un groupe de TA');
 
--- ---------------------------------------------------------------- contrôle : TA intacte (postgres) (2)
+-- ---------------------------------------------------------------- contrôle : TA intacte (postgres) (3)
 reset role;
 select is((select (select count(*) from public.groups where team_id = pg_temp.id('ta'))
                 + (select count(*) from public.swimmers where team_id = pg_temp.id('ta'))
@@ -150,6 +157,7 @@ select is((select (select count(*) from public.swimmers where firstname = 'pirat
                 + (select count(*) from public.coaches where display_name = 'pirate')
                 + (select count(*) from public.coaches where activated_at is not null))::int,
           3, 'après B, rien n’est renommé et seuls A, B, C sont activés');
+select is((select firstname || '/' || team_id::text from public.swimmers where id = pg_temp.id('sa1')), 'Léa/' || pg_temp.id('ta')::text, 'après l’upsert de B, le nageur de TA est inchangé');
 
 -- ---------------------------------------------------------------- E, inscrit dans TA mais non activé (14)
 select tests.as_coach(pg_temp.id('e'));
@@ -168,7 +176,7 @@ select throws_ok($$insert into public.swimmers(id,team_id,firstname,joined_seaso
 select is_empty($$update public.swimmers set firstname='pirate' where team_id=pg_temp.id('ta') returning 1$$, 'E ne modifie rien dans TA');
 select is_empty($$delete from public.sessions where team_id=pg_temp.id('ta') returning 1$$, 'E ne supprime rien dans TA');
 
--- ---------------------------------------------------------------- C, membre activé de TA (54)
+-- ---------------------------------------------------------------- C, membre activé de TA (55)
 select tests.as_coach(pg_temp.id('c'));
 select is(private.is_team_member(pg_temp.id('ta')), true, 'C est membre de TA');
 -- lecture
@@ -203,7 +211,9 @@ select lives_ok($$update public.swimmers set phone='0600000000' where team_id=pg
 select is((select count(*) from public.swimmers where team_id=pg_temp.id('ta') and phone='0600000000')::int, 4, 'les 4 nageurs de TA ont le nouveau téléphone');
 select is((select updated_by from public.swimmers where id=pg_temp.id('sa1')), pg_temp.id('c'), 'updated_by = dernier membre qui a modifié');
 select isnt_empty($$update public.swimmers set updated_at='2000-01-01' where id=pg_temp.id('sa2') returning 1$$, 'C envoie une date de modification ancienne');
-select is((select updated_at from public.swimmers where id=pg_temp.id('sa2')), now(), 'updated_at ne recule jamais');
+select is((select updated_at from public.swimmers where id=pg_temp.id('sa2')), now(), 'date ancienne envoyée : updated_at = heure du serveur');
+update public.swimmers set updated_at='2099-01-01' where id=pg_temp.id('sa3');
+select is((select updated_at from public.swimmers where id=pg_temp.id('sa3')), now(), 'date future envoyée (2099) : remplacée par l’heure du serveur');
 select isnt_empty($$update public.groups set name='Benjamins 1' where id=pg_temp.id('ga') returning 1$$, 'C modifie un groupe de TA');
 select isnt_empty($$update public.sessions set title='Aérobie' where team_id=pg_temp.id('ta') returning 1$$, 'C modifie les séances de TA');
 select isnt_empty($$update public.presence set updated_at=now() where team_id=pg_temp.id('ta') returning 1$$, 'C modifie les présences de TA');
