@@ -2,10 +2,11 @@
 // La clé serveur vient de l'environnement fourni par Supabase, jamais du dépôt.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { handleDeleteAccount } from '../_shared/delete-account.js';
+import { resolveKeys } from '../_shared/keys.js';
 
 const adminClient = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  resolveKeys((name: string) => Deno.env.get(name)).secretKey!,
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
 

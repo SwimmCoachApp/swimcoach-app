@@ -4,7 +4,9 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const FORBIDDEN_PROJECT = /aijgczmszymfjkeegbjz|vijexmmydvgfpkyzkgls/;
-const SECRET_SRC = /service_role|sb_secret_/;
+const SECRET_SRC = /service_role|sb_secret_/i;
+// Noms de variables d'environnement autorisés (la clé elle-même reste hors dépôt).
+const ALLOWED_ENV_NAMES = /\b(SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEYS)\b/g;
 // En dist, supabase-js contient le préfixe nu (contrôle de format) : on ne cherche
 // qu'une vraie clé, toujours suivie d'un long suffixe.
 const SECRET_DIST = /sb_secret_[A-Za-z0-9_-]{20,}/;
@@ -44,7 +46,9 @@ export function checkGuards(files, { mode = 'src' } = {}) {
         out.push({ path, rule: 'raw-localstorage', line: n });
       }
       if (!dist && LEGACY_KEY.test(line)) out.push({ path, rule: 'legacy-key', line: n });
-      if ((dist ? SECRET_DIST : SECRET_SRC).test(line)) out.push({ path, rule: 'secret-key', line: n });
+      if (dist ? SECRET_DIST.test(line) : SECRET_SRC.test(line.replace(ALLOWED_ENV_NAMES, ''))) {
+        out.push({ path, rule: 'secret-key', line: n });
+      }
       if (!dist && inSrc && INLINE_HANDLER.test(line)) out.push({ path, rule: 'inline-handler', line: n });
     });
   }
@@ -56,7 +60,7 @@ function walk(target, root, acc) {
   const st = statSync(target);
   if (st.isDirectory()) {
     for (const e of readdirSync(target)) walk(join(target, e), root, acc);
-  } else if (/\.(m?js|html|css|json|webmanifest|svg|sql|toml|txt)$/.test(target)) {
+  } else if (/\.(m?js|ts|html|css|json|webmanifest|svg|sql|toml|txt)$/.test(target)) {
     acc.push({ path: norm(relative(root, target)), text: readFileSync(target, 'utf8') });
   }
   return acc;

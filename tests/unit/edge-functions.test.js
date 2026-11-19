@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { buildLiveffnUrl, charsetOf, handleLiveffn, LIVEFFN_TIMEOUT_MS } from '../../supabase/functions/_shared/liveffn.js';
+import { buildLiveffnUrl, charsetOf, handleLiveffn, LIVEFFN_MAX_BYTES, LIVEFFN_TIMEOUT_MS } from '../../supabase/functions/_shared/liveffn.js';
 import { corsHeaders } from '../../supabase/functions/_shared/cors.js';
 import { soleMemberTeams } from '../../supabase/functions/_shared/teams.js';
 import { handleDeleteAccount } from '../../supabase/functions/_shared/delete-account.js';
+import { resolveKeys } from '../../supabase/functions/_shared/keys.js';
 
 const ORIGIN = 'https://swimmcoachapp.github.io';
 const UID = '11111111-1111-4111-8111-111111111111';
@@ -318,5 +319,62 @@ describe('handleDeleteAccount', () => {
     expect(res.status).toBe(500);
     expect(admin.log.find((l) => l[0] === 'delete teams')).toBeUndefined();
     expect(admin.log.find((l) => l[0] === 'deleteUser')).toBeUndefined();
+  });
+});
+
+// ------------------------------------------------------------------ resolveKeys
+describe('resolveKeys', () => {
+  const env = (o) => (k) => o[k];
+  test('nouvelles clés JSON (default) utilisées en priorité', () => {
+    const k = resolveKeys(env({
+      SUPABASE_SECRET_KEYS: JSON.stringify({ default: 'sec-new' }),
+      SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: 'pub-new' }),
+      SUPABASE_SERVICE_ROLE_KEY: 'sec-old', SUPABASE_ANON_KEY: 'pub-old',
+    }));
+    expect(k).toEqual({ secretKey: 'sec-new', publishableKey: 'pub-new' });
+  });
+  test('absentes : repli sur les anciennes clés', () => {
+    expect(resolveKeys(env({ SUPABASE_SERVICE_ROLE_KEY: 'sec-old', SUPABASE_ANON_KEY: 'pub-old' })))
+      .toEqual({ secretKey: 'sec-old', publishableKey: 'pub-old' });
+  });
+  test('JSON malformé ou sans default : repli, sans exception', () => {
+    expect(resolveKeys(env({ SUPABASE_SECRET_KEYS: '{oops', SUPABASE_PUBLISHABLE_KEYS: '"str"',
+      SUPABASE_SERVICE_ROLE_KEY: 'sec-old', SUPABASE_ANON_KEY: 'pub-old' })))
+      .toEqual({ secretKey: 'sec-old', publishableKey: 'pub-old' });
+    expect(resolveKeys(env({ SUPABASE_SECRET_KEYS: '{"other":"x"}', SUPABASE_PUBLISHABLE_KEYS: 'null' })))
+      .toEqual({ secretKey: undefined, publishableKey: undefined });
+  });
+});
+
+// ------------------------------------------------------------------ limite de taille liveffn
+describe('handleLiveffn : limite de 5 Mo', () => {
+  test('Content-Length au-delà de la limite : 502 sans lire le corps', async () => {
+    let pulled = false;
+    const body = new ReadableStream({ pull(c) { pulled = true; c.close(); } }, { highWaterMark: 0 });
+    const { deps } = liveDeps({ fetch: async () => new Response(body, { status: 200, headers: { 'Content-Length': String(LIVEFFN_MAX_BYTES + 1) } }) });
+    const res = await handleLiveffn(req('liveffn-proxy?competition=1'), deps);
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe('upstream_too_large');
+    expect(pulled).toBe(false);
+  });
+  test('flux sans Content-Length dépassant la limite : lecture interrompue, 502', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    let cancelled = false;
+    const body = new ReadableStream({
+      pull(c) { sent += 1; if (sent > 50) c.close(); else c.enqueue(chunk); },
+      cancel() { cancelled = true; },
+    });
+    const { deps } = liveDeps({ fetch: async () => new Response(body, { status: 200 }) });
+    const res = await handleLiveffn(req('liveffn-proxy?competition=1'), deps);
+    expect(res.status).toBe(502);
+    expect(cancelled).toBe(true);
+    expect(sent).toBeLessThanOrEqual(7);
+  });
+  test('exactement la limite : accepté', async () => {
+    const { deps } = liveDeps({ fetch: async () => new Response(new Uint8Array(LIVEFFN_MAX_BYTES).fill(0x61), { status: 200 }) });
+    const res = await handleLiveffn(req('liveffn-proxy?competition=1'), deps);
+    expect(res.status).toBe(200);
+    expect((await res.text()).length).toBe(LIVEFFN_MAX_BYTES);
   });
 });

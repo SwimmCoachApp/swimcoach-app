@@ -32,6 +32,40 @@ export function charsetOf(contentType, head = '') {
 }
 
 /**
+ * Corps de la réponse, au plus `max` octets : null si Content-Length ou le flux dépasse
+ * (lecture interrompue dès le dépassement, rien n'est mis en mémoire au-delà).
+ * @returns {Promise<Uint8Array|null>}
+ */
+export async function readLimited(res, max) {
+  const declared = Number(res.headers.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > max) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!res.body) return new Uint8Array(0);
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return out;
+}
+
+/**
  * @param {Request} request
  * @param {{ fetch: typeof fetch, createUserClient: (token:string) => any,
  *           timeoutMs?: number, structure?: number }} deps
@@ -74,8 +108,8 @@ export async function handleLiveffn(request, deps) {
     if (res.url && new URL(res.url).host !== LIVEFFN_HOST) {
       return jsonResponse(request, 502, { error: 'upstream_host' });
     }
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.byteLength > LIVEFFN_MAX_BYTES) return jsonResponse(request, 502, { error: 'upstream_too_large' });
+    const buf = await readLimited(res, LIVEFFN_MAX_BYTES);
+    if (!buf) return jsonResponse(request, 502, { error: 'upstream_too_large' });
     const head = new TextDecoder('latin1').decode(buf.subarray(0, 2048));
     const html = new TextDecoder(charsetOf(res.headers.get('Content-Type'), head)).decode(buf);
     return new Response(html, {

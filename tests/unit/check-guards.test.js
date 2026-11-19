@@ -63,3 +63,22 @@ test('runGuards : échoue (fail-closed) si dist/ absent ou vide, ou argument inc
   writeFileSync(join(root, 'dist', 'a.js'), 'ok');
   expect(runGuards(root, ['dist'])).toMatchObject({ error: null, violations: [] });
 });
+
+test('service_role dans un .ts sous supabase/ : signalé, sans tenir compte de la casse', () => {
+  const v = checkGuards([{ path: 'supabase/functions/x/index.ts', text: "const k = 'service_role';\nconst j = 'SERVICE_ROLE'" }]);
+  expect(v.map(x => [x.rule, x.line])).toEqual([['secret-key', 1], ['secret-key', 2]]);
+});
+test('noms de variables SUPABASE_SERVICE_ROLE_KEY et SUPABASE_SECRET_KEYS autorisés', () => {
+  expect(checkGuards([{ path: 'supabase/functions/x/index.ts', text:
+    "Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')\nDeno.env.get('SUPABASE_SECRET_KEYS')" }])).toEqual([]);
+  // le nom autorisé ne masque pas une vraie occurrence sur la même ligne
+  expect(checkGuards([{ path: 'supabase/a.ts', text: "SUPABASE_SERVICE_ROLE_KEY service_role" }]).length).toBe(1);
+});
+test('runGuards analyse les fichiers .ts', () => {
+  const root = mkdtempSync(join(tmpdir(), 'guards-ts-'));
+  for (const d of ['src', 'public', 'supabase/functions/f']) mkdirSync(join(root, d), { recursive: true });
+  writeFileSync(join(root, 'index.html'), '<p></p>');
+  writeFileSync(join(root, 'supabase/functions/f/index.ts'), "const k = 'service_role';");
+  const r = runGuards(root, []);
+  expect(r.violations.map(v => [v.path, v.rule])).toEqual([['supabase/functions/f/index.ts', 'secret-key']]);
+});

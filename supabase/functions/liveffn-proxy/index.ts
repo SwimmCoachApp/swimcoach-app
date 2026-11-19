@@ -1,9 +1,10 @@
 // Proxy liveffn : enveloppe Deno de _shared/liveffn.js (JWT vérifié par la plateforme).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { handleLiveffn } from '../_shared/liveffn.js';
+import { resolveKeys } from '../_shared/keys.js';
 
 const url = Deno.env.get('SUPABASE_URL')!;
-const publicKey = Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
+const publicKey = resolveKeys((name: string) => Deno.env.get(name)).publishableKey!;
 
 Deno.serve((request: Request) =>
   handleLiveffn(request, {
