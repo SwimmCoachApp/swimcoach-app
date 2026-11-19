@@ -2,7 +2,8 @@
 
 Contrôles Supabase lancés après les migrations `20261119140022_schema.sql`,
 `20261119140225_revoke_rls_auto_enable.sql`, `20261119140518_coaches_members_email_sync.sql`,
-`20261119141537_invite_code.sql` et `20261119141814_code_attempts_pk.sql`
+`20261119141537_invite_code.sql`, `20261119141814_code_attempts_pk.sql` et
+`20261119142821_teams.sql`
 (projet de développement, 19/11/2026). Les noms de fichiers reprennent la version
 enregistrée par le projet hébergé (`list_migrations`).
 
@@ -26,10 +27,28 @@ dans `public` reçoit bien la RLS). Second passage : aucune alerte.
   voulu. Aucun client n'y accède (aucun droit, schéma non exposé) ; seules les
   fonctions serveur les lisent. RLS activée sans politique = tout refusé par défaut.
 
+## Sécurité, tâche 4 bis : alertes attendues, gardées
+
+- WARN `authenticated_security_definer_function_executable` sur les 7 RPC d'espace :
+  `create_team`, `rename_team`, `add_team_member`, `cancel_invite`,
+  `remove_team_member`, `delete_team`, `claim_my_invites`. C'est voulu : ce sont les seules
+  portes d'écriture sur `teams` (création, suppression), `team_members` et
+  `team_invites`. Les clients n'ont aucun droit d'écriture direct sur ces tables.
+  Chaque RPC (sauf `create_team` et `claim_my_invites`) commence par vérifier que
+  l'appelant est membre activé de l'espace visé (`not_allowed`). `create_team` exige un
+  compte activé. `claim_my_invites` n'agit que sur les invitations de l'adresse
+  confirmée de l'appelant. Toutes ont `search_path = ''` et aucun droit pour `anon` ni
+  PUBLIC.
+- INFO `rls_enabled_no_policy` sur `private.invite_log` : voulu (même règle que pour
+  `club_invite` et `code_attempts`).
+
+Performance, tâche 4 bis : aucune nouvelle alerte. `team_invites_email_idx` n'est plus
+signalé comme inutilisé : `claim_invites` s'en sert.
+
 Performance, tâche 4 : INFO « pas de clé primaire » sur `private.code_attempts`,
 corrigé par `20261119141814_code_attempts_pk.sql` (identifiant technique).
 
-## Performance : 3 alertes INFO « index inutilisé », gardées
+## Performance : alertes INFO « index inutilisé », gardées
 
 - `teams_created_by_idx`, `team_invites_invited_by_idx` : index sur des clés étrangères
   vers `auth.users` (`on delete set null`). Sans eux, la suppression d'un compte
@@ -60,6 +79,23 @@ corrigé par `20261119141814_code_attempts_pk.sql` (identifiant technique).
   et toute écriture sur `team_members` / `team_invites` passent par les fonctions
   serveur (tâche 4 bis).
 - Un compte non activé ne voit rien, même inscrit dans `team_members`.
+- Espaces et invitations (tâche 4 bis) :
+  - `add_team_member` est limité à 20 appels par heure et par appelant
+    (`private.invite_log`, verrou sur la ligne `coaches` de l'appelant). Un appel refusé
+    pour adresse invalide est annulé avec son entrée du journal.
+  - Un compte existant n'est ajouté directement que si
+    `lower(auth.users.email)` = l'adresse normalisée et que l'adresse est confirmée.
+    Sinon, une invitation est créée.
+  - Une invitation n'est rattachée (`claim_invites`, appelée par
+    `redeem_invite_code` et `claim_my_invites`) que pour un compte activé dont l'adresse
+    est confirmée : on ne peut pas prendre l'invitation d'une autre personne en
+    s'inscrivant avec son adresse sans la confirmer.
+  - N'importe quel membre peut retirer n'importe quel membre, lui-même compris.
+    Le dernier membre ne peut pas partir (`last_member`, verrou sur la ligne `teams`) :
+    il supprime l'espace, et `delete_team` efface toutes ses données en cascade.
+  - Le nom d'un espace est nettoyé (`btrim`) et doit faire de 1 à 60 caractères, sinon
+    `invalid_name`. Ce contrôle est fait par la RPC plutôt que de laisser la contrainte
+    CHECK lever 23514, pour donner à l'app un message propre.
 - Code du club : haché avec bcrypt (`extensions.crypt`, `gen_salt('bf')`), jamais en
   clair, dans `private.club_invite` (une seule ligne). Damien le pose ou le change dans
   l'éditeur SQL : `select private.set_invite_code('LE-CODE');` (non exécutable par les

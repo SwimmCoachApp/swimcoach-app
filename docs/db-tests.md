@@ -9,6 +9,7 @@ Fichiers : `supabase/tests/database/`
 - `isolation.test.sql` : isolation entre espaces d'équipe (146 assertions). Il
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
 - `invite_code.test.sql` : activation par le code du club (27 assertions).
+- `teams.test.sql` : espaces, membres et invitations (70 assertions).
 
 Règle d'écriture : chaque assertion pgTAP commence **en début de ligne** par
 `select` (`select is(`, `select throws_ok(`, `select * from finish()`...). Le script
@@ -104,3 +105,33 @@ C et D : comptes confirmés, non activés.
 - D : 5 mauvais essais, le 6e (bon code) → `too_many_attempts`, non enregistré ; une
   heure plus tard, D peut réessayer et s'active.
 - Sans identifiant de compte → `not_allowed` ; `anon` → `42501`.
+
+## Ce que couvre teams.test.sql
+
+A, B, C activés ; E non activé ; U a un compte dont l'adresse n'est pas confirmée.
+B est seul dans TB.
+
+- Droits : les 7 RPC sont exécutables par `authenticated`, ni par `anon` ni par PUBLIC,
+  security definer avec `search_path` vide. `private.invite_log` : RLS activée, aucun
+  droit client.
+- A crée TA (nom nettoyé, A inscrit, `created_by`). Nom vide ou trop long →
+  `invalid_name`. A renomme TA.
+- `add_team_member` :
+  - C (adresse en majuscules et espaces) → `added` ; une seconde fois → `already_member` ;
+  - D sans compte → `invited`, une seule ligne même invité deux fois ;
+  - U (compte non confirmé) → `invited` ;
+  - adresse invalide ou nulle → `invalid_email`.
+- `cancel_invite`.
+- B (non membre) : `not_allowed` partout. E (non activé) ne crée pas d'espace. Sans
+  `sub` → `not_allowed` ; `anon` → `42501`.
+- D :
+  - adresse non confirmée → `claim_my_invites()` = 0 ;
+  - une fois confirmée → 1, D lit TA et l'invitation est supprimée ;
+  - second appel → 0.
+- F (invité, non activé) : 0, puis `redeem_invite_code` le fait entrer dans TA.
+- G : invité, puis il crée son compte : `added`, et l'invitation est supprimée.
+- Limite : 20 appels acceptés, le 21e → `too_many_invites` ; à nouveau possible une
+  heure plus tard.
+- C retire A (A ne voit plus rien et ne peut plus inviter). F part de lui-même. Retirer
+  un non-membre ne fait rien. Le dernier membre → `last_member`. `delete_team` efface
+  tout en cascade ; TB est intacte.
