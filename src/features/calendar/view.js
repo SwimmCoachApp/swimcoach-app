@@ -11,12 +11,28 @@ const RICH_BUTTONS = [
   ['bold', '<b>B</b>', 'Gras'],
   ['italic', '<i>I</i>', 'Italique'],
   ['underline', '<u>U</u>', 'Souligné'],
+  ['strikeThrough', '<s>S</s>', 'Barré'],
   null,
   ['insertUnorderedList', '•≡', 'Liste à puces'],
   ['insertOrderedList', '1≡', 'Liste numérotée'],
   null,
+  'color',
+  ['hiliteColor', '🖊', 'Surligner', '#fde04780'],
+  null,
   ['removeFormat', '✕f', 'Effacer la mise en forme'],
 ];
+
+/** Couleur du texte proposée au départ (club4). */
+export const DEFAULT_TEXT_COLOR = '#1e6fff';
+
+/** @param {Array|string|null} b bouton de la barre d'outils @returns {string} */
+function toolHtml(b) {
+  if (!b) return '<div class="tb-sep"></div>';
+  if (b === 'color') {
+    return html`<label class="tb-btn color-picker-btn" title="Couleur du texte"><span class="color-swatch" id="color-swatch" aria-hidden="true"></span><input type="color" class="color-input-hidden" id="color-picker" value="${DEFAULT_TEXT_COLOR}" data-action="fore-color" data-on="input" aria-label="Couleur du texte"></label>`;
+  }
+  return html`<button type="button" class="tb-btn" data-action="fmt" data-cmd="${b[0]}"${b[3] ? raw(html` data-value="${b[3]}"`) : ''} aria-label="${b[2]}" title="${b[2]}">${raw(b[1])}</button>`;
+}
 
 /** @returns {string} structure de l'écran : calendrier, panneau du jour, feuilles */
 export function screenHtml() {
@@ -168,11 +184,11 @@ export function sessionFormHtml(s, { type }) {
         <span class="form-label" id="sess-type-label">Type</span>
         <div class="type-pills" role="group" aria-labelledby="sess-type-label">${SESSION_TYPES.map((t) => raw(html`<button type="button" class="type-pill${t === type ? ` selected-${t}` : ''}" data-action="pick-type" data-key="${t}" aria-pressed="${t === type}">${TYPE_ICONS[t]} ${SESSION_NAMES[t]}</button>`))}</div>
       </div>
-      <div class="form-group"><label class="form-label" for="sess-time">Heure du cours</label><input type="time" class="form-input" id="sess-time" value="${v.time || '08:00'}"></div>
+      <div class="form-group"><label class="form-label" for="sess-time">Heure du cours</label><input type="time" class="form-input" id="sess-time" value="${s ? v.time ?? '' : '08:00'}"></div>
       <div class="form-group">
         <span class="form-label" id="sess-content-label">Contenu de la séance</span>
         <div class="editor-wrapper">
-          <div class="editor-toolbar" id="editor-toolbar" role="toolbar" aria-label="Mise en forme">${RICH_BUTTONS.map((b) => raw(b ? html`<button type="button" class="tb-btn" data-action="fmt" data-cmd="${b[0]}" aria-label="${b[2]}">${raw(b[1])}</button>` : '<div class="tb-sep"></div>'))}</div>
+          <div class="editor-toolbar" id="editor-toolbar" role="toolbar" aria-label="Mise en forme">${RICH_BUTTONS.map((b) => raw(toolHtml(b)))}</div>
           <div class="editor-content" id="editor-content" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="sess-content-label" data-placeholder="Écris ton entraînement ici…" spellcheck="false">${raw(sanitizeRich(v.content))}</div>
           <div class="km-row"${type === 'musc' ? raw(' hidden') : ''} id="sess-km-row">
             <label class="km-label" for="sess-km">🏊 Km :</label>

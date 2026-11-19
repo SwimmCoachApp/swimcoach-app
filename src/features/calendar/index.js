@@ -33,6 +33,17 @@ const ui = {
 const openHooks = new Set();
 const savedHooks = new Set();
 
+/** Appelle chaque crochet séparément : un crochet qui plante n'empêche ni les autres ni la suite. */
+function runHooks(hooks, ...args) {
+  for (const cb of [...hooks]) {
+    try {
+      cb(...args);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
+
 /**
  * @param {(slot: HTMLElement, info: {id: string, date: string, isNew: boolean}) => void} cb appelé à chaque ouverture du formulaire
  * @returns {() => void} désabonnement
@@ -173,12 +184,17 @@ function openForm(id, date) {
   const s = id ? db.sessions.get(id) : null;
   if (id && !s) return;
   closeFormState();
+  editorRange = null;
   const type = s?.type ?? 'nat';
   ui.form = { id: s?.id ?? crypto.randomUUID(), isNew: !s, date: s?.date ?? date, type, photo: null, removePhoto: false, existingPath: s?.photo_path ?? null, previewUrl: null, saving: false };
   const form = ui.form;
   el('session-sheet').innerHTML = sessionFormHtml(s, { type });
   const toolbar = el('editor-toolbar');
-  toolbar.addEventListener('mousedown', (e) => e.preventDefault()); // garde la sélection du texte dans l'éditeur
+  toolbar.addEventListener('mousedown', (e) => { // garde la sélection du texte dans l'éditeur
+    if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); // le sélecteur de couleur doit pouvoir s'ouvrir
+  });
+  // selectionchange arrive en différé : on note aussi la sélection juste après chaque geste dans l'éditeur
+  for (const type of ['keyup', 'mouseup', 'touchend', 'input']) el('editor-content').addEventListener(type, saveEditorRange);
   el('editor-content').addEventListener('paste', (e) => { // collage en texte brut : pas de mise en forme venue d'ailleurs
     e.preventDefault();
     document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? '');
@@ -187,7 +203,7 @@ function openForm(id, date) {
     photoUrl(s.photo_path).then((url) => { if (ui.form === form && !form.photo && !form.removePhoto) setPhotoUI(url); }).catch(() => { /* hors ligne */ });
   }
   const info = { id: form.id, date: form.date, isNew: form.isNew };
-  for (const cb of [...openHooks]) cb(el('session-presence-slot'), info);
+  runHooks(openHooks, el('session-presence-slot'), info);
   openModal('modal-session');
 }
 
@@ -216,10 +232,34 @@ on('pick-type', (btn) => {
   el('sess-km-row').hidden = form.type === 'musc';
   if (form.type === 'musc') el('sess-km').value = '';
 });
+/** Dernière sélection dans l'éditeur : le sélecteur de couleur prend le focus, on la remet avant d'appliquer. */
+let editorRange = null;
+function saveEditorRange() {
+  const sel = document.getSelection();
+  const editor = el('editor-content');
+  if (editor && sel?.rangeCount && editor.contains(sel.anchorNode)) editorRange = sel.getRangeAt(0).cloneRange();
+}
+document.addEventListener('selectionchange', saveEditorRange);
+
+function focusEditor() {
+  const editor = el('editor-content');
+  editor.focus();
+  if (editorRange && editor.contains(editorRange.startContainer)) {
+    const sel = document.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(editorRange);
+  }
+}
+
 on('fmt', (btn) => {
-  el('editor-content').focus();
-  document.execCommand(btn.dataset.cmd, false, null);
+  focusEditor();
+  document.execCommand(btn.dataset.cmd, false, btn.dataset.value ?? null);
 });
+on('fore-color', (input) => {
+  el('color-swatch')?.style.setProperty('background', input.value);
+  focusEditor();
+  document.execCommand('foreColor', false, input.value);
+}, 'input');
 
 on('photo-camera', () => el('sess-photo-input-cam')?.click());
 on('photo-gallery', () => el('sess-photo-input-file')?.click());
@@ -273,7 +313,7 @@ async function submitForm() {
       closeModal('modal-session');
       closeFormState();
     }
-    for (const cb of [...savedHooks]) cb({ session, isNew: form.isNew });
+    runHooks(savedHooks, { session, isNew: form.isNew });
   } catch (e) {
     toast(e instanceof Error ? e.message : 'Enregistrement impossible');
   } finally {

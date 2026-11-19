@@ -195,3 +195,28 @@ test('titres : jour et période en français', () => {
   expect(formatPlanDate('2026-11-20', '2026-11-20')).toBe('20 nov.');
   expect(formatPlanDate('2026-11-20', '')).toBe('20 nov.');
 });
+
+describe('formulaire : heure', () => {
+  test('une séance existante sans heure garde le champ vide ; 08:00 seulement pour une nouvelle séance', async () => {
+    const { sessionFormHtml } = await import('../../src/features/calendar/view.js');
+    const timeOf = (markup) => {
+      const el = document.createElement('div');
+      el.innerHTML = markup;
+      return el.querySelector('#sess-time').value;
+    };
+    expect(timeOf(sessionFormHtml({ id: 'x', date: '2026-11-20', type: 'nat', time: null }, { type: 'nat' }))).toBe('');
+    expect(timeOf(sessionFormHtml({ id: 'x', date: '2026-11-20', type: 'nat', time: '18:15' }, { type: 'nat' }))).toBe('18:15');
+    expect(timeOf(sessionFormHtml(null, { type: 'nat' }))).toBe('08:00');
+  });
+
+  test('barre d’outils : barré, couleur du texte et surlignage comme club4', async () => {
+    const { sessionFormHtml } = await import('../../src/features/calendar/view.js');
+    const el = document.createElement('div');
+    el.innerHTML = sessionFormHtml(null, { type: 'nat' });
+    expect(el.querySelector('[data-cmd="strikeThrough"]')).not.toBeNull();
+    expect(el.querySelector('[data-cmd="hiliteColor"]').dataset.value).toBe('#fde04780');
+    const color = el.querySelector('input[type="color"][data-action="fore-color"]');
+    expect(color.dataset.on).toBe('input');
+    expect(color.getAttribute('aria-label')).toBe('Couleur du texte');
+  });
+});

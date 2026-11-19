@@ -253,7 +253,11 @@ test('contenu hostile en base : affiché comme du texte, jamais exécuté', asyn
   await open(page, {
     tables: {
       sessions: [{ id: SID, team_id: T1, date: '2026-11-20', title: '<img src=x onerror=window.__xss=1>', type: 'nat', time: '08:00', km: 1, photo_path: null,
-        content: '<b>ok</b><img src=x onerror=window.__xss=1><script>window.__xss=2</script><a href="javascript:window.__xss=3">lien</a>' }],
+        content: '<b>ok</b><img src=x onerror=window.__xss=1><script>window.__xss=2</script><a href="javascript:window.__xss=3">lien</a>'
+          + '<span style="color:#ff0000;position:fixed;top:0;background:url(javascript:window.__xss=4)">rouge</span>'
+          + '<span style="background-color:expression(alert(1));color:var(--x)">neutre</span>'
+          + '<font color="#00aa00" face="x" size="7">vert</font><strike>barré</strike>'
+          + '<span style="background-color: rgba(253, 224, 71, 0.5)">surligné</span>' }],
     },
   });
   await cell(page, '2026-11-20').click();
@@ -266,7 +270,54 @@ test('contenu hostile en base : affiché comme du texte, jamais exécuté', asyn
   expect(await page.locator('[data-screen="calendar"] img').count()).toBe(0);
   expect(await view.locator('a, script').count()).toBe(0);
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+  // couleurs et barré gardés (liste blanche stricte), tout autre style supprimé
+  const rich = view.locator('.sess-view-content-html');
+  expect(await rich.locator('span', { hasText: 'rouge' }).getAttribute('style')).toBe('color: #ff0000');
+  expect(await rich.locator('span', { hasText: 'neutre' }).getAttribute('style')).toBeNull();
+  expect(await rich.locator('span', { hasText: 'vert' }).getAttribute('style')).toBe('color: #00aa00');
+  expect(await rich.locator('span', { hasText: 'surligné' }).getAttribute('style')).toBe('background-color: rgba(253, 224, 71, 0.5)');
+  await expect(rich.locator('s')).toHaveText('barré');
+  expect(await rich.locator('font, strike, [style*="position"], [style*="url"]').count()).toBe(0);
   await view.getByRole('button', { name: /Modifier/ }).click();
   await expect(page.locator('#editor-content b')).toHaveText('ok');
   expect(await page.locator('#editor-content img, #editor-content a').count()).toBe(0);
+});
+
+test('barre d’outils : barré, couleur et surlignage enregistrés nettoyés ; une séance sans heure le reste', async ({ page }) => {
+  const SID = '66666666-6666-4666-8666-666666666666';
+  const fake = await open(page, { tables: { sessions: [{ id: SID, team_id: T1, date: '2026-11-20', title: 'Sans heure', type: 'nat', time: null, content: '', km: null, photo_path: null }] } });
+  await cell(page, '2026-11-20').click();
+  await page.locator('.session-card').click();
+  await page.locator('#modal-session-view').getByRole('button', { name: /Modifier/ }).click();
+  await expect(form(page)).toHaveClass(/open/);
+  await expect(page.getByLabel('Heure du cours')).toHaveValue('');
+
+  const editor = page.locator('#editor-content');
+  await editor.click();
+  await page.keyboard.type('barré ');
+  await page.keyboard.press('Shift+Home');
+  await page.getByRole('button', { name: 'Barré' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('vert ');
+  await page.keyboard.down('Shift');
+  for (let i = 0; i < 5; i += 1) await page.keyboard.press('ArrowLeft');
+  await page.keyboard.up('Shift');
+  await page.getByLabel('Couleur du texte').fill('#00aa00');
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('jaune');
+  await page.keyboard.down('Shift');
+  for (let i = 0; i < 5; i += 1) await page.keyboard.press('ArrowLeft');
+  await page.keyboard.up('Shift');
+  await page.getByRole('button', { name: 'Surligner' }).click();
+  await page.getByRole('button', { name: /Enregistrer/ }).click();
+  await expect(form(page)).not.toHaveClass(/open/);
+
+  await expect.poll(() => fake.state.tables.sessions[0].content).toContain('jaune');
+  const saved = fake.state.tables.sessions[0];
+  expect(saved.time).toBeNull();
+  expect(saved.content).toMatch(/^<s>barré/); // la mise en forme continue sur le texte tapé ensuite
+  expect(saved.content).toMatch(/<span style="color: (#00aa00|rgb\(0, 170, 0\))">vert/);
+  expect(saved.content).toMatch(/<span style="background-color: rgba\(253, 224, 71, 0\.5\)">jaune<\/span>/);
+  expect(saved.content).not.toMatch(/<font|<strike|class=/);
 });
