@@ -1,0 +1,45 @@
+/* Tokens et thèmes (clair / sombre) — repris de club4. */
+/* ═══════════════════════════════════════════
+   TOKENS & THEME
+═══════════════════════════════════════════ */
+:root {
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  --radius: 18px; --radius-sm: 10px; --radius-xs: 6px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.18);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.28);
+  --transition: 0.22s cubic-bezier(.4,0,.2,1);
+  --safe-b: env(safe-area-inset-bottom, 16px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+[data-theme="dark"] {
+  --bg:#071327; --bg2:#0C1B36; --bg3:#13264B; --bg4:#1D345F;
+  --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.16);
+  --text:#EAF0FB; --text2:#A9B8D4; --text3:#7388AD;
+  --accent:#FF5A36; --accent-h:#FF7253; --accent-bg:rgba(255,90,54,0.16);
+  --swim:#38D1F0; --swim-bg:rgba(56,209,240,0.13);
+  --musc:#FF8A5C; --musc-bg:rgba(255,138,92,0.14);
+  --comp:#B79BFF; --comp-bg:rgba(183,155,255,0.15);
+  --plan:#4ADE80; --plan-bg:rgba(74,222,128,0.14);
+  --green:#4ADE80; --red:#F87171; --yellow:#FBBF24;
+  --nav-bg:#0A1730; --card-bg:#0F2044;
+  --input-bg:#0A1730; --modal-bg:#0C1B36; --overlay:rgba(2,8,20,0.74);
+  --hero:#0B2350; --on-hero:#FFFFFF; --check:#38D1F0; --check-ink:#04122A; --time-ink:#04122A;
+  --av1:#0A8FAE; --av2:#6C3BF5; --av3:#C2410C; --av4:#2B4C94; --av5:#15803D;
+}
+[data-theme="light"] {
+  --bg:#FFFFFF; --bg2:#FFFFFF; --bg3:#F3F5F9; --bg4:#E3E8F0;
+  --border:rgba(10,31,68,0.08); --border2:rgba(10,31,68,0.16);
+  --text:#0A1F44; --text2:#4A5D80; --text3:#6B7C99;
+  --accent:#FF5A36; --accent-h:#E64A28; --accent-bg:rgba(255,90,54,0.12);
+  --swim:#0A8FAE; --swim-bg:#E6F8FC;
+  --musc:#C2410C; --musc-bg:#FFEDE6;
+  --comp:#6C3BF5; --comp-bg:#EFE9FF;
+  --plan:#15803D; --plan-bg:#E4F6EA;
+  --green:#15803D; --red:#B91C1C; --yellow:#B45309;
+  --nav-bg:#FFFFFF; --card-bg:#F3F5F9;
+  --input-bg:#F3F5F9; --modal-bg:#FFFFFF; --overlay:rgba(10,31,68,0.55);
+  --hero:#0A1F44; --on-hero:#FFFFFF; --check:#0A1F44; --check-ink:#FFFFFF; --time-ink:#FFFFFF;
+  --av1:#0A8FAE; --av2:#6C3BF5; --av3:#C2410C; --av4:#0A1F44; --av5:#15803D;
+}
+

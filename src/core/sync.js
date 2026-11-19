@@ -41,7 +41,10 @@ export function configureSync(deps = {}) {
 
 configureOutbox({
   forbidden: (op) => verifyMembership(op.coachId, op.teamId),
-  rejected: (_op, _error, total) => hooks.toast(`${total} modification(s) refusée(s) par le serveur`),
+  rejected: (op, _error, total) => {
+    hooks.toast(`${total} modification(s) refusée(s) par le serveur`);
+    scheduleRefresh(op.table); // la ligne refusée revient à l'état du serveur
+  },
 });
 
 onCoachChange((coach) => {

@@ -151,6 +151,20 @@ test('refus définitifs : le toast donne le nombre total de modifications refus�
   expect(toast).toHaveBeenLastCalledWith('2 modification(s) refusée(s) par le serveur');
 });
 
+test("refus définitif : la table de l'op refusée est relue pour revenir à l'état du serveur", async () => {
+  vi.useFakeTimers();
+  startLive();
+  fake.client.tables.swimmers = [{ id: 'w1', team_id: 'T1', name: 'serveur' }];
+  upsertLocal('swimmers', { id: 'w1', name: 'refusé' });
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'w1', row: db.swimmers.get('w1') });
+  fake.client.failWith = (call) => (call.op === 'select' ? null : pgError('23503'));
+  await flush(fake.client, 'A', 'T1');
+  expect(rejectedCount('T1')).toBe(1);
+  await vi.advanceTimersByTimeAsync(LIVE_DELAY_MS);
+  expect(fake.client.calls.some((c) => c.op === 'select' && c.table === 'swimmers')).toBe(true);
+  expect(db.swimmers.get('w1').name).toBe('serveur');
+});
+
 test('relecture tardive : une page lue avant notre écriture ne la défait pas, une nouvelle relecture est programmée', async () => {
   vi.useFakeTimers();
   startLive();

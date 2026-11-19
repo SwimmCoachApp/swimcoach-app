@@ -137,6 +137,7 @@ test('(f) la déconnexion efface les données de l’entraîneur et laisse l’a
   expect(keysBefore).toContain('swimcoach2_auth');
   expect(keysBefore).toContain(`swimcoach2_${id}_team`);
 
+  await page.getByRole('button', { name: 'Réglages' }).click(); // la déconnexion est dans les réglages
   await page.getByRole('button', { name: 'Se déconnecter' }).click();
   await expect(page.getByRole('button', { name: 'Se connecter' })).toBeVisible();
 

@@ -1,3 +1,14 @@
+import '@fontsource/bricolage-grotesque/latin-400.css';
+import '@fontsource/bricolage-grotesque/latin-700.css';
+import '@fontsource/bricolage-grotesque/latin-800.css';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/inter/latin-800.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/club.css';
 import './styles/auth.css';
 import { initSession, getCoach, onCoachChange, onPasswordRecovery, isRecovering, configureSession } from './core/session.js';
 import { listMyTeams, getCurrentTeam, setCurrentTeam } from './core/teams.js';
@@ -6,6 +17,10 @@ import { configureSync, openTeam, closeTeam } from './core/sync.js';
 import { showCredentials, showCode, showRecovery, leaveSession } from './features/auth/index.js';
 import { showCreateTeam } from './features/teams/picker.js';
 import { startApp } from './app/shell.js';
+import { registerPlaceholderScreens } from './app/screens.js';
+import { initTheme } from './app/theme.js';
+import { toast } from './app/toast.js';
+import { initUpdate } from './app/update.js';
 
 const root = document.querySelector('#app');
 let run = 0;
@@ -13,7 +28,10 @@ let run = 0;
 // signOut renvoie 'pending' tant que la file d'attente de l'entraîneur n'est pas vide.
 configureSession({ getPendingCount: (coachId) => pendingCount(undefined, coachId) });
 // Accès à l'espace ouvert perdu : on reprend le routage (autre espace ou « Crée ton espace »).
-configureSync({ onTeamLost: () => route() });
+configureSync({ toast, onTeamLost: () => route() });
+initTheme();
+registerPlaceholderScreens();
+initUpdate();
 
 /** Garde de démarrage : choisit l'écran selon la session, l'activation et les espaces. */
 async function route() {
