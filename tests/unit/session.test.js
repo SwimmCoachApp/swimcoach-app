@@ -1,11 +1,19 @@
 import { vi } from 'vitest';
 import { authStorageAdapter } from '../../src/core/storage.js';
 
-const auth = { signOut: vi.fn(async () => ({ error: null })), signUp: vi.fn(), onAuthStateChange: vi.fn(), getSession: vi.fn() };
+const auth = {
+  signOut: vi.fn(async () => ({ error: null })),
+  signUp: vi.fn(),
+  signInWithPassword: vi.fn(),
+  onAuthStateChange: vi.fn(),
+  getSession: vi.fn(),
+};
 const rpc = vi.fn();
-vi.mock('../../src/core/supabase.js', () => ({ supabase: { auth, rpc: (...a) => rpc(...a) } }));
+const coachRow = { data: { id: 'x', activated_at: '2026-01-01' }, error: null };
+const from = () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => coachRow }) }) });
+vi.mock('../../src/core/supabase.js', () => ({ supabase: { auth, rpc: (...a) => rpc(...a), from: (...a) => from(...a) } }));
 
-const { signUp, signOut, redeemCode, configureSession } = await import('../../src/core/session.js');
+const { signUp, signIn, signOut, redeemCode, configureSession } = await import('../../src/core/session.js');
 
 beforeEach(() => {
   localStorage.clear();
@@ -55,4 +63,26 @@ test("l'adaptateur d'authentification ignore les clés hors swimcoach2_", () => 
   expect(localStorage.getItem('swimcoach_v2')).toBe('OLD');
   authStorageAdapter.removeItem('swimcoach2_auth');
   expect(localStorage.getItem('swimcoach2_auth')).toBeNull();
+});
+
+test("passage d'un entraîneur à un autre : les données de l'ancien sont effacées si sa file n'est pas vide", async () => {
+  const login = async (id) => {
+    auth.signInWithPassword.mockResolvedValueOnce({ data: { user: { id, email: `${id}@b.fr` } }, error: null });
+    await signIn(`${id}@b.fr`, 'motdepasse-long');
+  };
+  const pending = { A: 0, B: 0 };
+  configureSession({ getPendingCount: (id) => pending[id] ?? 0 });
+  await login('A');
+  localStorage.setItem('swimcoach2_A_T1_outbox', '[1]');
+  pending.A = 0;
+  await login('B');
+  expect(localStorage.getItem('swimcoach2_A_T1_outbox')).toBe('[1]'); // file vide pour session.js : rien effacé
+
+  await login('A');
+  pending.A = 1;
+  localStorage.setItem('swimcoach2_auth', 'S');
+  await login('B');
+  expect(localStorage.getItem('swimcoach2_A_T1_outbox')).toBeNull();
+  expect(localStorage.getItem('swimcoach2_B_activated')).toBe('true');
+  expect(localStorage.getItem('swimcoach2_auth')).toBe('S');
 });

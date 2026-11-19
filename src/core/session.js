@@ -21,9 +21,9 @@ const recoveryListeners = new Set();
 
 /**
  * Branche des dépendances de la session.
- * @param {{getPendingCount?: () => number}} deps
- *   getPendingCount : nombre d'écritures en attente d'envoi. La file d'attente (tâche 8) la branche ;
- *   tant qu'elle n'existe pas, il vaut toujours 0 et signOut ne renvoie jamais 'pending'.
+ * @param {{getPendingCount?: (coachId?: string) => number}} deps
+ *   getPendingCount : nombre d'écritures en attente d'envoi de l'entraîneur donné (par défaut le
+ *   connecté), tous espaces confondus. Branchée sur la file d'attente par main.js.
  */
 export function configureSession(deps = {}) {
   if (deps.getPendingCount) getPendingCount = deps.getPendingCount;
@@ -53,6 +53,10 @@ export function onPasswordRecovery(cb) {
 
 function setCoach(next) {
   const same = (!coach && !next) || (coach && next && coach.id === next.id && coach.activated === next.activated && coach.email === next.email);
+  // Un autre entraîneur prend la place sans déconnexion : les écritures en attente de l'ancien ne
+  // doivent jamais partir sous le nouveau. On efface les données de l'ancien seulement (pas la
+  // session d'authentification ni les données du nouveau, que clearAllCoachData effacerait).
+  if (coach && next && coach.id !== next.id && getPendingCount(coach.id) > 0) coachStore(coach.id).clear();
   coach = next;
   if (!same) for (const cb of [...coachListeners]) cb(coach);
 }
@@ -175,7 +179,7 @@ export async function updatePassword(password) {
  * @returns {Promise<'done'|'pending'>} 'pending' si des écritures attendent d'être envoyées et que force est faux
  */
 export async function signOut({ force = false } = {}) {
-  if (!force && getPendingCount() > 0) return 'pending';
+  if (!force && getPendingCount(coach?.id) > 0) return 'pending';
   try {
     await supabase.auth.signOut({ scope: 'local' });
   } catch {
