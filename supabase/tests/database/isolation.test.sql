@@ -76,7 +76,7 @@ select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
              and (has_function_privilege('anon', p.oid, 'execute')
                   or has_function_privilege('authenticated', p.oid, 'execute')
                   or exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0))),
-          'is_active_coach,is_team_member', 'fonctions private : aucune pour PUBLIC ni anon, authenticated seulement les deux d’appartenance');
+          'is_active_coach,is_team_member,team_from_path', 'fonctions private : aucune pour PUBLIC ni anon, authenticated seulement les deux d’appartenance et team_from_path');
 update auth.users set email = 'Nouveau.A@Example.TEST' where id = pg_temp.id('a');
 select is((select email from public.coaches where id = pg_temp.id('a')), 'nouveau.a@example.test', 'coaches.email suit le changement d’e-mail du compte (minuscules)');
 
