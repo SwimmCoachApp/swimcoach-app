@@ -43,6 +43,8 @@ Pourquoi : suivre son propre groupe sans voir (ni abîmer) les données des coll
 - **Offre gratuite Supabase** : pas de sauvegardes, pause après une semaine d'inactivité. Acceptable en test, à passer en offre payante avant de recevoir de vraies données de mineurs.
 - **GitHub Pages** n'est gratuit que pour les dépôts publics. Le dépôt est privé aujourd'hui : décision en section 11.
 - Échelle : une dizaine d'entraîneurs, quelques centaines de nageurs. Pas de contrainte de performance particulière.
+- **Projets Supabase interdits** pour toute migration, test ou requête : l'ancien projet SwimCoach (`aijgczmszymfjkeegbjz`) et le projet « École de natation TOAC » (`vijexmmydvgfpkyzkgls`, une autre app de Damien). Ces deux références figurent sur la liste noire de la CI. Le travail de la phase de construction se fait uniquement sur le **nouveau** projet de Damien.
+- **Environnement de développement** (choix du rédacteur) : un seul projet Supabase hébergé pendant la construction, avec des comptes de test créés et supprimés par les scripts ; aucune vraie donnée avant l'offre payante et le SMTP. Les tests d'isolation tournent aussi en CI sur une pile Supabase locale (`supabase start`, Docker disponible sur les machines GitHub). Les migrations sont des fichiers du dépôt, donc le projet peut être recréé à l'identique.
 
 ## 4. Approches considérées
 
@@ -117,17 +119,23 @@ Les noms de dossiers ci-dessus sont une proposition. Le constructeur peut les aj
 
 **Cache local** : le cache hors ligne est rangé sous `swimcoach2_<id entraîneur>_...`. À la déconnexion, tout `swimcoach2_*` lié à l'entraîneur est effacé. Deux entraîneurs sur le même téléphone ne voient jamais les données l'un de l'autre.
 
+**Hors ligne** : `club4` n'a pas de vraie file d'attente d'écritures. Il fonctionne en « local d'abord » : au démarrage, il fusionne le cloud et le local, puis renvoie les éléments présents seulement en local (nageurs, séances, planning), avec un marqueur « en attente » pour les présences. La nouvelle app garde ce comportement et le rend plus solide (choix du rédacteur) :
+- file d'attente persistante pour les nageurs, séances, présences et planning, avec identifiants `uuid` créés côté app, colonne `updated_at` et écritures idempotentes (`upsert`) ;
+- les photos exigent le réseau (pas de file d'attente pour elles) ;
+- **déconnexion avec modifications non synchronisées** : l'app prévient (« N modifications ne sont pas encore envoyées »), propose d'attendre le réseau ou de se déconnecter quand même, et dans ce cas les efface avec le reste du cache.
+
 **Temps réel** : conservé pour synchroniser les appareils du **même** entraîneur (filtre sur son `coach_id`, RLS appliquée). Le constructeur peut le remplacer par un rechargement à la reprise de l'app si c'est plus simple.
 
 **Suppression du compte** (exigée par Apple) : bouton dans l'app → fonction `delete-account` qui supprime les fichiers de stockage, puis l'utilisateur ; les lignes partent en cascade.
 
-**Proxy liveffn** : à redéployer dans le nouveau projet (le code de l'ancien n'est pas dans le dépôt actuel ; à réécrire). Contraintes : JWT obligatoire, liste blanche du seul domaine liveffn, structure TOAC (id 39) dans la configuration.
+**Proxy liveffn** : le contrat se lit dans `club4` (le code de l'ancienne fonction n'est pas dans le dépôt). Le client appelle `GET <proxy>?competition=<id>&structure=39` (délai de 15 s) et reçoit le **texte de la page liveffn** ; toute l'analyse (épreuves, temps, rangs, points, fractionnés) et le rattachement aux nageurs se font **dans l'app** (`parse…` et `matchSwimmersToDB`). Le rattachement se fait par **nom + prénom normalisés** (essai aussi inversé), avec la logique de saison de `club4` (nageur actif ou présent dans la saison, archivés ignorés). Aucun numéro de licence n'est utilisé.
+La nouvelle fonction `liveffn-proxy` ne fait que **relayer** la page : JWT obligatoire (l'ancienne était déployée sans vérification, donc ouverte à tous), liste blanche du seul domaine liveffn, id de structure 39 en configuration, en-têtes CORS pour l'appel avec jeton. Le code d'analyse de `club4` est repris tel quel dans `features/perfs/`.
 
 ## 7. Modèle de données
 
 Tables de la nouvelle base, d'après l'usage de `club4` : `coaches` (profil, `activated_at`), `groups`, `swimmers`, `sessions`, `presence`, `plan_weeks`, `plan_events`, `performances`, plus la table du code du club et un compteur d'essais.
 
-- Identifiants `uuid`. Présence en `upsert` sur `(session_id, swimmer_id)` (l'ancienne app envoyait des opérations par nageur pour éviter les écrasements : à conserver).
+- Identifiants `uuid` créés côté app, avec `updated_at` sur chaque table (voir « Hors ligne »). Les nageurs portent leur logique de saison de `club4` (saison d'arrivée, archivage). Les performances ne dépendent d'aucun numéro de licence : le rattachement se fait par nom. Présence en `upsert` sur `(session_id, swimmer_id)` (l'ancienne app envoyait des opérations par nageur pour éviter les écrasements : à conserver).
 - Récupération paginée (limite de 1000 lignes de Supabase).
 - Le détail des colonnes se déduit du code de `club4` (référence : `ssephiroth31/Swimcoachpro`, `index.html`, commit `8aaad5c`). Le constructeur propose le schéma exact dans les migrations.
 - Aucune donnée n'est reprise de l'ancienne base.
@@ -178,7 +186,7 @@ En cas de doute sur un comportement, **le code de `club4` fait foi**.
 
 À régler avant la première mise en ligne (pas avant d'écrire le code) :
 - **Dépôt public ou privé** : public (Pages gratuit, aucun secret dans le code) ou privé avec un autre hébergeur (Cloudflare Pages, Netlify).
-- **Projet Supabase** : région UE, organisation, offre. La session ne voit aujourd'hui que le projet « École de natation TOAC ».
+- **Projet Supabase** : région UE, organisation, offre. La session ne voit aujourd'hui que le projet « École de natation TOAC » (à ne jamais toucher). Le nouveau projet doit être **accessible depuis la session** pour que le constructeur puisse y appliquer les migrations et lancer les contrôles de sécurité.
 - **SMTP** : service d'envoi (Brevo, Resend…) et adresse d'expéditeur, idéalement au nom du club.
 - **Code d'inscription** initial.
 - **Éditeur et identifiant d'application** pour les stores, avant publication seulement.
