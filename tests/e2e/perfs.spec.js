@@ -185,3 +185,34 @@ test('erreurs de récupération : messages en français ; données de la page é
   await sheet.getByRole('button', { name: 'Nouvelle recherche' }).click();
   await expect(sheet.getByLabel('URL liveffn ou ID compétition')).toBeVisible();
 });
+
+test('temps de passage : une course s’ouvre au toucher ; le bilan PDF les liste', async ({ page }) => {
+  const s = seed();
+  s.tables.performances = [
+    ...SEEDED,
+    { ...perf(4, '91000', 'Meeting d’automne', '2026-11-08', '25m', '03:13.53', 193530, 410), event_code: '53', event_label: '200 Nage Libre Messieurs - Séries', distance: 200,
+      splits: [
+        { dist: 50, split_ms: 42280, split_display: '42.28', lap_display: '(42.28)' },
+        { dist: 100, split_ms: 92210, split_display: '1:32.21', lap_display: '(49.93)' },
+        { dist: 150, split_ms: 144310, split_display: '2:24.31', lap_display: '(52.10)' },
+        { dist: 200, split_ms: 193530, split_display: '3:13.53', lap_display: '(49.22)' },
+      ] },
+  ];
+  await installFakeSupabase(page, s);
+  await interceptOpen(page);
+  await login(page);
+  const screen = page.locator('[data-screen="perfs"]');
+  await screen.locator('.perf-swimmer-card', { hasText: 'Léo' }).click();
+  const row = screen.locator('.perf-history-row.has-splits');
+  await expect(row).toHaveCount(1); // les 50 m sans passages ne s'ouvrent pas
+  const panel = screen.locator('.perf-splits');
+  await expect(panel).toBeHidden();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('.perf-splits-row')).toHaveText(['5042.2842.28', '1001:32.2149.93', '1502:24.3152.10', '2003:13.5349.22']);
+  await row.click();
+  await expect(panel).toBeHidden();
+  await screen.getByRole('button', { name: 'Exporter le bilan PDF' }).click();
+  await expect.poll(() => page.evaluate(() => window.__pdf.html)).toContain('50 : 42.28 · 100 : 1:32.21 (49.93) · 150 : 2:24.31 (52.10) · 200 : 3:13.53 (49.22)');
+});

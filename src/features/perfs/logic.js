@@ -248,3 +248,21 @@ export function formatDateFR(iso) {
   const [y, m, d] = iso.split('-');
   return `${parseInt(d, 10)} ${MOIS[parseInt(m, 10) - 1]} ${y}`;
 }
+
+/**
+ * Temps de passage d'une course (importés de liveFFN), prêts à afficher.
+ * @param {{splits?: {dist: number, split_display?: string, lap_display?: string}[]|null}} perf
+ * @returns {{dist: number, cumul: string, lap: string}[]} vide s'il n'y en a pas, ou un seul (le temps final)
+ */
+export function splitsOf(perf) {
+  const list = Array.isArray(perf?.splits) ? perf.splits.filter((s) => s && Number(s.dist) > 0 && s.split_display) : [];
+  if (list.length < 2) return [];
+  return list
+    .slice()
+    .sort((a, b) => a.dist - b.dist)
+    .map((s, i) => ({
+      dist: Number(s.dist),
+      cumul: String(s.split_display).trim(),
+      lap: String(s.lap_display ?? '').replace(/[()]/g, '').trim() || (i === 0 ? String(s.split_display).trim() : ''),
+    }));
+}

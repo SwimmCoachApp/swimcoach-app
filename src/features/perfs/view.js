@@ -4,7 +4,7 @@ import { db } from '../../core/store.js';
 import { currentSeason, seasonOfDateKey } from '../../core/season.js';
 import { listSwimmers, groupLabel } from '../contacts/logic.js';
 import { shortEventLabel } from './parse.js';
-import { perfsOf, seasonRange, swimmerSeasonPoints, swimmerSeasonRaces, bestTimes, byDateDesc, formatDateFR } from './logic.js';
+import { perfsOf, seasonRange, swimmerSeasonPoints, swimmerSeasonRaces, bestTimes, byDateDesc, formatDateFR, splitsOf } from './logic.js';
 
 const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 const initials = (sw) => `${(sw.firstname || '').charAt(0)}${(sw.lastname || '').charAt(0)}`.toUpperCase();
@@ -164,7 +164,9 @@ export function detailParts(swimmerId, filters, now = new Date()) {
       const pc = poolClass(p.pool);
       const rank = p.rank == null ? '' : html`<span class="perf-rank-badge${p.rank <= 3 ? ` podium${p.rank}` : ''}">${p.rank}${p.rank === 1 ? 'er' : 'e'}</span>`;
       const timeCls = `perf-history-time${isBest ? ' best' : ''}${p.status === 'dsq' ? ' dsq' : ''}${p.status === 'dns' || p.status === 'dnf' ? ' dns' : ''}`;
-      return html`<div class="perf-history-row${isBest ? ' is-best' : ''}${pc ? ` pool-row-${pc}` : ''}">
+      const splits = splitsOf(p);
+      const open = splits.length ? html` role="button" tabindex="0" data-action="perfs-splits" data-id="${p.id}" aria-expanded="false" aria-controls="splits-${p.id}"` : '';
+      return html`<div class="perf-history-row${isBest ? ' is-best' : ''}${pc ? ` pool-row-${pc}` : ''}${splits.length ? ' has-splits' : ''}"${raw(open)}>
         <div class="perf-history-main">
           <div class="perf-history-event">${isBest ? raw('<span class="perf-best-star">🏆</span>') : ''}${shortEventLabel(p.event_code)}
             <span class="perf-mt-pool${pc ? ` pool-${pc}` : ''}">${p.pool || '?'}</span>
@@ -173,7 +175,8 @@ export function detailParts(swimmerId, filters, now = new Date()) {
           <div class="perf-history-meta">${p.competition_date ? formatDateFR(p.competition_date) : ''} · ${p.competition_name || ''}${rank ? raw(` · ${rank}`) : ''}${p.points ? raw(html` · <span class="perf-points">${p.points} pts</span>`) : ''}</div>
         </div>
         <div class="${timeCls}">${p.time_display || '—'}</div>
-      </div>`;
+        ${splits.length ? raw('<span class="perf-splits-chevron" aria-hidden="true">▾</span>') : ''}
+      </div>${splits.length ? raw(splitsPanelHtml(p.id, splits)) : ''}`;
     }).join('');
 
   return { banner, eventOptions, mt, history };
@@ -252,6 +255,7 @@ const PDF_CSS = `
   tbody td{padding:7px 10px;border-bottom:1px solid #E3E8F0;font-size:11px;vertical-align:middle;}
   tbody tr.is-best{background:#FFF6D6;}
   tbody tr.mt-row{background:#F1FBFD;}
+  tbody tr.splits-row td{padding-top:0;font-size:10px;color:#5B6B8A;letter-spacing:.1px;}
   .col-date{white-space:nowrap;color:#475569;width:90px;}
   .col-comp{max-width:180px;overflow:hidden;text-overflow:ellipsis;}
   .col-event{white-space:nowrap;}
@@ -298,6 +302,32 @@ const seasonLabelOf = (s) => (s == null ? '—' : `${s}–${String(s + 1).slice(
 const perfSeason = (p) => (p.competition_date ? seasonOfDateKey(p.competition_date) : null);
 const dateCell = (p) => (p.competition_date ? formatDateFR(p.competition_date) : '—');
 
+/**
+ * Tableau des passages sous une course de l'historique (caché tant qu'on ne touche pas la course).
+ * @param {string} id
+ * @param {{dist: number, cumul: string, lap: string}[]} splits
+ * @returns {string}
+ */
+export function splitsPanelHtml(id, splits) {
+  const step = splits.length > 1 ? splits[1].dist - splits[0].dist : splits[0].dist;
+  return html`<div class="perf-splits" id="splits-${id}" hidden>
+    <div class="perf-splits-head"><span>Dist.</span><span>Passage</span><span>${step} m</span></div>
+    ${splits.map((s, i) => raw(html`<div class="perf-splits-row${i === splits.length - 1 ? ' last' : ''}"><span>${s.dist}</span><span>${s.cumul}</span><span>${s.lap}</span></div>`))}
+  </div>`;
+}
+
+/** Ligne des passages pour le bilan PDF (« 50 : 42.28 · 100 : 1:32.21 (49.93) · … »), '' sans passages. */
+export function splitsLine(p) {
+  const splits = splitsOf(p);
+  return splits.map((s, i) => (i === 0 ? `${s.dist} : ${s.cumul}` : `${s.dist} : ${s.cumul}${s.lap ? ` (${s.lap})` : ''}`)).join(' · ');
+}
+
+/** Rangée du PDF sous une course, avec ses passages ; '' sans passages. */
+function splitsRow(p, cols) {
+  const line = splitsLine(p);
+  return line ? html`<tr class="splits-row"><td colspan="${cols}">${line}</td></tr>` : '';
+}
+
 function rankHtml(rank) {
   if (rank == null) return '—';
   if (rank === 1) return '<span class="rank-badge rk1">1<sup>er</sup></span>';
@@ -323,7 +353,7 @@ function histRow(p, bestIds) {
       <td class="col-time">${raw(timeHtml(p, isBest))}</td>
       <td class="col-rank">${raw(rankHtml(p.rank))}</td>
       <td class="col-pts">${p.points ? p.points : '—'}</td>
-    </tr>`;
+    </tr>${raw(splitsRow(p, 7))}`;
 }
 
 /** Un tableau par bassin (25 m, 50 m, autre s'il y en a). */
@@ -384,7 +414,7 @@ export function bilanPdfHtml(swimmerId, { teamName = '', swimmerSvg = '', now = 
         <td class="col-time"><strong>${p.time_display || ''}</strong></td>
         <td class="col-date">${dateCell(p)}</td>
         <td class="col-season">${s != null ? raw(html`<span class="season-pill">${seasonLabelOf(s)}</span>`) : '—'}</td>
-      </tr>`;
+      </tr>${raw(splitsRow(p, 4))}`;
   };
   const seasonRow = (p) => {
     const isRecord = bestIds.has(p.id);
@@ -393,7 +423,7 @@ export function bilanPdfHtml(swimmerId, { teamName = '', swimmerSvg = '', now = 
         <td class="col-time"><strong>${p.time_display || ''}</strong></td>
         <td class="col-date">${dateCell(p)}</td>
         <td class="col-rank">${p.rank != null ? raw(html`${p.rank}<sup>e</sup>`) : '—'}</td>
-      </tr>`;
+      </tr>${raw(splitsRow(p, 4))}`;
   };
 
   const seasonHistRows = seasonHist.length === 0
