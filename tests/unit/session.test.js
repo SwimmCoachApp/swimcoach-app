@@ -13,7 +13,7 @@ const coachRow = { data: { id: 'x', activated_at: '2026-01-01' }, error: null };
 const from = () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => coachRow }) }) });
 vi.mock('../../src/core/supabase.js', () => ({ supabase: { auth, rpc: (...a) => rpc(...a), from: (...a) => from(...a) } }));
 
-const { signUp, signIn, signOut, redeemCode, configureSession, isReloadPending, FLUSH_WAIT_MS } = await import('../../src/core/session.js');
+const { signUp, signIn, signOut, redeemCode, updatePassword, configureSession, isReloadPending, FLUSH_WAIT_MS } = await import('../../src/core/session.js');
 
 beforeEach(() => {
   localStorage.clear();
@@ -41,6 +41,13 @@ test('signUp : un e-mail déjà envoyé il y a moins d’une minute donne un mes
   await expect(signUp('a@b.fr', 'motdepasse-long')).rejects.toThrow(
     'Un e-mail de confirmation vient déjà de partir : vérifie ta boîte mail (et les spams). Tu pourras en redemander un dans une minute.',
   );
+});
+
+test('updatePassword : un mot de passe identique à l’actuel n’est pas une erreur (le lien a déjà connecté)', async () => {
+  auth.updateUser = vi.fn(async () => ({ data: {}, error: { code: 'same_password', status: 422 } }));
+  await expect(updatePassword('motdepasse-long')).resolves.toBe('unchanged');
+  auth.updateUser = vi.fn(async () => ({ data: {}, error: null }));
+  await expect(updatePassword('motdepasse-long')).resolves.toBe('changed');
 });
 
 test("signOut renvoie 'pending' sans rien effacer tant que l'outbox n'est pas vide", async () => {
