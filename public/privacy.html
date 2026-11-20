@@ -50,17 +50,21 @@
 
       <h2>Quelles données sont traitées</h2>
       <ul>
-        <li><strong>Entraîneurs</strong> : adresse e-mail, mot de passe (conservé sous forme chiffrée, jamais lisible), nom affiché, espaces dont vous êtes membre.</li>
+        <li><strong>Entraîneurs</strong> : adresse e-mail, mot de passe (protégé par hachage, jamais lisible, y compris par le club), nom affiché, espaces dont vous êtes membre, et les adresses e-mail des invitations à rejoindre un espace (avec l'entraîneur qui a invité).</li>
         <li><strong>Nageurs</strong> : prénom, nom, date de naissance, groupe, saisons de présence au club, et, si l'entraîneur les renseigne, adresse e-mail, téléphone et photo.</li>
-        <li><strong>Suivi sportif</strong> : séances (texte, kilomètres, photo éventuelle), présences, performances et temps de course, planning de la saison.</li>
+        <li><strong>Suivi sportif</strong> : séances (texte, kilomètres, photo éventuelle), présences, performances et temps de course, planning de la saison. Les temps de course proviennent des résultats publics de liveffn, récupérés côté serveur par la fonction Supabase du club lorsqu'un entraîneur les importe.</li>
       </ul>
-      <p><strong>Une partie des nageurs sont des mineurs.</strong> Leurs données ne sont accessibles qu'aux entraîneurs ayant activé leur compte avec le code du club et membres de l'espace concerné. Elles ne sont ni vendues, ni utilisées pour de la publicité, ni partagées avec des tiers à d'autres fins.</p>
+      <p><strong>Une partie des nageurs sont des mineurs.</strong> Leurs données ne sont accessibles qu'aux entraîneurs ayant activé leur compte avec le code du club et membres de l'espace concerné. Elles ne sont ni vendues, ni utilisées pour de la publicité. Les seuls sous-traitants sont :</p>
+      <ul>
+        <li>Supabase, pour l'hébergement dans l'Union européenne ;</li>
+        <li>le prestataire d'envoi des e-mails (SMTP), une fois configuré : <span class="todo">à compléter par le club</span>.</li>
+      </ul>
 
       <h2>Où sont-elles hébergées</h2>
       <p>Les données sont hébergées dans l'Union européenne (région <code>eu-west-1</code>, Irlande) chez Supabase. Une copie de travail est conservée sur l'appareil de l'entraîneur pour que l'application fonctionne sans réseau ; elle est effacée à la déconnexion.</p>
 
       <h2>Combien de temps sont-elles conservées</h2>
-      <p>Durée de conservation : <span class="todo">à définir par le club</span>. Les données d'un espace sont supprimées avec cet espace, et un compte supprimé disparaît immédiatement.</p>
+      <p>Durée de conservation : <span class="todo">à définir par le club</span>. Les données d'un espace sont supprimées avec cet espace, et un compte supprimé est supprimé de la base, hors copies de sauvegarde de l'hébergeur, effacées selon sa propre durée de rotation.</p>
 
       <h2>Vos droits et la suppression de votre compte</h2>
       <p>Conformément au RGPD, vous pouvez accéder à vos données, les faire rectifier, les faire effacer, vous opposer à leur traitement, en demander la limitation ou la portabilité. Un nageur, ou son représentant légal s'il est mineur, peut exercer ces droits auprès du club.</p>

@@ -9,7 +9,7 @@ fictives (aucun nageur réel, aucune donnée de mineur).
 1. **Inscription** : sur l'écran de connexion, « Créer un compte » avec une adresse dédiée
    (par exemple `demo-stores@<domaine du club>`, boîte lue par le club) et un mot de passe d'au moins
    10 caractères, propre à ce compte. Confirmer l'adresse par le lien reçu par e-mail
-   (« Confirm email » reste activé : le relecteur n'a rien à confirmer, le compte l'est déjà).
+   (« Confirm email » reste activé : c'est le club qui confirme l'adresse en lisant cette boîte, avant de remettre le compte ; le relecteur reçoit un compte déjà confirmé et activé).
 2. **Code du club** : à l'écran « Active ton compte », saisir le code d'inscription du club.
 3. **Espace** : « Crée ton espace » avec le nom « Démo SwimCoach ». Les groupes par défaut sont créés.
 4. **Jeu de données fictif** : ajouter à la main, ou par import (Nageurs, « Importer ») un fichier

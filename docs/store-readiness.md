@@ -25,6 +25,8 @@ Compilation
 Données et RGPD
 - [ ] **Décision RGPD du club** : valider `privacy.html`, fixer la **durée de conservation** (aujourd'hui « à définir par le club ») et renseigner le **contact** (« à compléter par le club »). Les mentions s'appliquent à des données de mineurs.
 - [ ] Passer Supabase à l'**offre payante** avant de saisir de vraies données de mineurs (le projet gratuit est réservé à la construction).
+- [ ] Vérifier les contrats de sous-traitance (**DPA**) de Supabase et du prestataire SMTP, et les citer dans `privacy.html`.
+- [ ] La boîte e-mail du compte de démonstration doit être lisible par le club (confirmation, réinitialisation).
 - [ ] **SMTP** : service d'envoi (Brevo, Resend…) avec une adresse d'expéditeur au nom du club, pour les e-mails de confirmation et de réinitialisation.
 - [ ] **Code du club** : choisir le code d'inscription initial.
 - [ ] Laisser « **Confirm email** » activé dans Supabase (Authentication).
