@@ -82,10 +82,31 @@ export async function addMember(teamId, email) {
   const clean = String(email ?? '').trim().toLowerCase();
   if (!clean) throw new Error('Adresse e-mail invalide');
   const result = await rpc('add_team_member', { team: teamId, email: clean });
-  if (result === 'added') return `${clean} a été ajouté`;
-  if (result === 'invited') return `Invitation en attente : demande à ${clean} de créer son compte avec cette adresse`;
   if (result === 'already_member') return 'Déjà membre';
-  return 'Une erreur est survenue, réessaie';
+  if (result !== 'added' && result !== 'invited') return 'Une erreur est survenue, réessaie';
+  const base = result === 'added' ? `${clean} a été ajouté` : `Invitation en attente pour ${clean}`;
+  const mail = await sendInviteEmail(teamId, clean);
+  if (mail === 'sent') return `${base} : un e-mail l'a prévenu`;
+  if (mail === 'already_sent') return `${base} (e-mail déjà envoyé aujourd'hui)`;
+  return `${base}, mais l'e-mail n'a pas pu partir : préviens-le toi-même`;
+}
+
+/**
+ * Prévient la personne ajoutée ou invitée par e-mail (fonction serveur `invite-email`, SMTP de l'app).
+ * Ne lève jamais : l'ajout est déjà fait, seul le message change.
+ * @param {string} teamId
+ * @param {string} email
+ * @returns {Promise<'sent'|'already_sent'|'failed'>}
+ */
+export async function sendInviteEmail(teamId, email) {
+  try {
+    const { data, error } = await supabase.functions.invoke('invite-email', { method: 'POST', body: { team: teamId, email } });
+    if (error) return 'failed';
+    if (data?.sent) return 'sent';
+    return data?.reason === 'already_sent' ? 'already_sent' : 'failed';
+  } catch {
+    return 'failed';
+  }
 }
 
 /**
@@ -216,7 +237,7 @@ export function spaceSectionHtml(team) {
       <button type="button" class="btn-sm btn-accent" data-action="member-add">Ajouter</button>
     </div>
     <p class="settings-msg" data-members-msg role="status"></p>
-    <p class="settings-note">Aucun e-mail n'est envoyé : préviens ton collègue toi-même.</p>
+    <p class="settings-note">Ton collègue reçoit un e-mail de SwimCoach App qui l'invite à rejoindre le groupe.</p>
     <label class="form-label settings-gap" for="space-new">Créer un autre groupe</label>
     <div class="settings-row">
       <input type="text" class="form-input" id="space-new" maxlength="60" autocomplete="off" placeholder="Nom du nouveau groupe" aria-label="Nom du nouveau groupe">

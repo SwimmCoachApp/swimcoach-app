@@ -58,7 +58,8 @@ test('(e) ajout par e-mail, invitation, retrait d’un membre par un autre, dern
 
   await add.fill('c@toac.fr');
   await pageA.getByRole('button', { name: 'Ajouter', exact: true }).click();
-  await expect(msg).toHaveText('c@toac.fr a été ajouté');
+  await expect(msg).toHaveText("c@toac.fr a été ajouté : un e-mail l'a prévenu");
+  expect(fake.state.inviteEmails).toEqual([{ team: TA, email: 'c@toac.fr', by: A }]);
   await expect(pageA.locator('.member-row', { hasText: 'c@toac.fr' })).toBeVisible();
 
   await add.fill('c@toac.fr');
@@ -74,13 +75,27 @@ test('(e) ajout par e-mail, invitation, retrait d’un membre par un autre, dern
   // invitation d'une adresse sans compte, puis annulation
   await add.fill('d@club.fr');
   await pageA.getByRole('button', { name: 'Ajouter', exact: true }).click();
-  await expect(msg).toHaveText('Invitation en attente : demande à d@club.fr de créer son compte avec cette adresse');
+  await expect(msg).toHaveText("Invitation en attente pour d@club.fr : un e-mail l'a prévenu");
+  expect(fake.state.inviteEmails.map((m) => m.email)).toEqual(['c@toac.fr', 'd@club.fr']);
   const invite = pageA.locator('.invite-row', { hasText: 'd@club.fr' });
   await expect(invite).toBeVisible();
   expect(fake.state.tables.team_invites.map((i) => i.email)).toEqual(['d@club.fr']);
   await invite.getByRole('button', { name: 'Annuler' }).click();
   await expect(invite).toHaveCount(0);
   expect(fake.state.tables.team_invites).toEqual([]);
+
+  // réinvitée le même jour : pas de second e-mail ; e-mail en échec : l'invitation reste, message clair
+  await add.fill('d@club.fr');
+  await pageA.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await expect(msg).toHaveText("Invitation en attente pour d@club.fr (e-mail déjà envoyé aujourd'hui)");
+  fake.state.inviteEmailStatus = 502;
+  await add.fill('e@club.fr');
+  await pageA.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await expect(msg).toHaveText("Invitation en attente pour e@club.fr, mais l'e-mail n'a pas pu partir : préviens-le toi-même");
+  await expect(pageA.locator('.invite-row', { hasText: 'e@club.fr' })).toBeVisible();
+  fake.state.inviteEmailStatus = null;
+  for (const e of ['d@club.fr', 'e@club.fr']) await pageA.locator('.invite-row', { hasText: e }).getByRole('button', { name: 'Annuler' }).click();
+  await expect(pageA.locator('.invite-row')).toHaveCount(0);
 
   // C retire A
   await settings(pageC);
