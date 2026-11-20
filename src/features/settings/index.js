@@ -44,9 +44,11 @@ function onStoreChange() {
   draw();
 }
 
+/** Compteurs de l'espace ouvert seulement (la déconnexion, elle, compte tous les espaces). */
 function refreshSync() {
   const box = find('#settings-sync');
-  if (box) box.innerHTML = syncHtml(pendingCount(), rejectedCount());
+  const team = currentTeam();
+  if (box && team) box.innerHTML = syncHtml(pendingCount(team.id), rejectedCount(team.id));
 }
 
 /** Lit le nom affiché (dernier connu hors ligne). */
@@ -132,9 +134,10 @@ on('settings-del-group', (btn) => {
 
 on('settings-export-rejected', () => {
   const coach = getCoach();
-  if (!coach) return;
+  const team = currentTeam();
+  if (!coach || !team) return;
   const names = new Map((coachStore(coach.id).get('teams') ?? []).map((t) => [t.id, t.name]));
-  const rows = listRejected(coach.id).map((e) => ({ teamId: e.teamId, teamName: names.get(e.teamId) ?? '', at: e.at, error: e.error, op: e.op }));
+  const rows = listRejected(coach.id, team.id).map((e) => ({ teamId: e.teamId, teamName: names.get(e.teamId) ?? '', at: e.at, error: e.error, op: e.op }));
   const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -148,17 +151,18 @@ on('settings-export-rejected', () => {
 
 on('settings-clear-rejected', async () => {
   const coach = getCoach();
-  if (!coach) return;
-  const n = rejectedCount();
+  const team = currentTeam();
+  if (!coach || !team) return;
+  const n = rejectedCount(team.id);
   const ok = await askConfirm({
     icon: '🧹',
     title: 'Effacer les modifications refusées ?',
-    text: `${n} modification(s) refusée(s) par le serveur seront oubliées sur cet appareil. Exporte-les d'abord pour en garder une trace.`,
+    text: `${n} modification(s) refusée(s) par le serveur de l'espace « ${team.name} » seront oubliées sur cet appareil. Exporte-les d'abord pour en garder une trace.`,
     confirm: 'Effacer',
     danger: true,
   });
-  if (!ok || getCoach()?.id !== coach.id) return;
-  clearRejected(coach.id);
+  if (!ok || getCoach()?.id !== coach.id || currentTeam()?.id !== team.id) return;
+  clearRejected(coach.id, team.id);
   refreshSync();
 });
 

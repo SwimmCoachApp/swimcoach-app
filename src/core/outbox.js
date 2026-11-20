@@ -123,22 +123,24 @@ export function rejectedCount(teamId, coachId = getCoach()?.id) {
 }
 
 /**
- * Écritures refusées définitivement, tous espaces de l'entraîneur (pour l'export).
+ * Écritures refusées définitivement (pour l'export).
  * @param {string} [coachId] par défaut l'entraîneur connecté
+ * @param {string} [teamId] un espace ; tous les espaces de l'entraîneur si absent
  * @returns {{teamId: string, op: object, error: {code: string, status: number, message: string}, at: string}[]}
  */
-export function listRejected(coachId = getCoach()?.id) {
+export function listRejected(coachId = getCoach()?.id, teamId) {
   if (!coachId) return [];
-  return teamsOf(coachId).flatMap((t) => readRejected(coachId, t).map((e) => ({ teamId: t, ...e })));
+  return teamsOf(coachId, teamId).flatMap((t) => readRejected(coachId, t).map((e) => ({ teamId: t, ...e })));
 }
 
 /**
- * Efface les refus définitifs de tous les espaces de l'entraîneur (la file en attente est gardée).
+ * Efface les refus définitifs (la file en attente est gardée).
  * @param {string} [coachId] par défaut l'entraîneur connecté
+ * @param {string} [teamId] un espace ; tous les espaces de l'entraîneur si absent
  */
-export function clearRejected(coachId = getCoach()?.id) {
+export function clearRejected(coachId = getCoach()?.id, teamId) {
   if (!coachId) return;
-  for (const t of teamsOf(coachId)) writeList(coachId, t, 'outbox_rejected', []);
+  for (const t of teamsOf(coachId, teamId)) writeList(coachId, t, 'outbox_rejected', []);
 }
 
 /**

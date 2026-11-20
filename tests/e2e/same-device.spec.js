@@ -102,11 +102,37 @@ test('(c) la session de A expire hors ligne avec une op en attente ; avertisseme
   expect(await keysOf(page, A)).toEqual([]);
 
   fake.state.offline = false;
+  const reloaded = page.waitForEvent('load'); // déconnexion forcée après attente dépassée : la page se recharge au retour du réseau
   await context.setOffline(false);
+  await reloaded;
   await login(page, 'b@toac.fr');
   await page.getByRole('button', { name: 'Nageurs', exact: true }).click();
   await expect(page.locator('.contact-row')).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(fake.state.tables.swimmers).toEqual([]);
   expect(fake.callsTo('/rest/v1/swimmers').filter((c) => c.method === 'POST')).toEqual([]);
+});
+
+test('(g) renouvellement de A encore en cours quand B se connecte : B reste connecté, rien de A, la session stockée est celle de B', async ({ page }) => {
+  test.setTimeout(60_000);
+  const fake = await installFakeSupabase(page, seed());
+  const A = fake.coachId('a@toac.fr');
+  const B = fake.coachId('b@toac.fr');
+  await page.clock.install({ time: Date.now() });
+  await page.goto('/');
+  await login(page, 'a@toac.fr');
+  await page.clock.fastForward('02:00:00'); // jeton de A expiré : la déconnexion déclenche un renouvellement
+  fake.state.clockOffsetMs = 2 * 3600 * 1000;
+  fake.state.refreshDelayMs = 8000; // … qui répond très tard (le verrou de supabase-js reste pris)
+
+  await logout(page);
+  await expect(page.getByRole('button', { name: 'Se connecter' })).toBeVisible({ timeout: 10000 });
+  fake.state.refreshDelayMs = 0;
+  await login(page, 'b@toac.fr');
+  await expect(page.locator('[data-team-name]')).toHaveText('Espace B');
+  await page.waitForTimeout(9000); // le renouvellement de A (s'il vit encore) a eu le temps d'aboutir
+  await expect(page.locator('[data-team-name]')).toHaveText('Espace B');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('swimcoach2_auth') || 'null'));
+  expect(stored?.user?.id).toBe(B);
+  expect(await keysOf(page, A)).toEqual([]);
 });

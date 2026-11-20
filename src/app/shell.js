@@ -38,11 +38,12 @@ export function currentTeam() {
 }
 
 /**
- * Le nom de l'espace ouvert vient de changer (renommé depuis les réglages) : met à jour la coque.
+ * Un espace a été renommé (ici ou sur un autre appareil) : met à jour la coque s'il est l'espace ouvert.
+ * @param {string} id
  * @param {string} name
  */
-export function setCurrentTeamName(name) {
-  if (!ctx) return;
+export function setCurrentTeamName(id, name) {
+  if (!ctx || ctx.team.id !== id || ctx.team.name === name) return;
   ctx.team = { ...ctx.team, name };
   ctx.teams = null;
   const el = ctx.root.querySelector('[data-team-name]');

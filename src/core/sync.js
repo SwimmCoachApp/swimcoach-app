@@ -21,7 +21,7 @@ export const PAGE_SIZE = 1000;
 /** Colonnes de tri (clé primaire) pour une pagination stable. */
 const ORDER = { presence: ['session_id', 'swimmer_id'], plan_weeks: ['week_key'] };
 
-let hooks = { toast: () => {}, onTeamLost: () => {}, onSynced: () => {} };
+let hooks = { toast: () => {}, onTeamLost: () => {}, onSynced: () => {}, onTeamRenamed: () => {} };
 /** @type {{coachId: string, team: {id: string, name: string}}|null} */
 let current = null;
 const checks = new Map();
@@ -35,6 +35,7 @@ const applied = new Map();
  *   toast : message court ; onTeamLost : l'espace ouvert n'est plus accessible, `next` est l'espace
  *   à ouvrir (déjà choisi comme espace courant) ou null (écran « Crée ton espace »).
  *   onSynced : appelé quand les 7 tables viennent d'être lues et fusionnées sans erreur ni lecture périmée.
+ *   onTeamRenamed : l'espace ouvert porte un autre nom sur le serveur (renommé ailleurs), `{id, name}`.
  */
 export function configureSync(deps = {}) {
   hooks = { ...hooks, ...deps };
@@ -140,7 +141,16 @@ async function runMembership(coachId, teamId) {
     return 'unknown'; // liste illisible : on ne retire rien
   }
   if (getCoach()?.id !== coachId) return 'unknown';
-  if (teams.some((t) => t.id === teamId)) return 'member';
+  const mine = teams.find((t) => t.id === teamId);
+  if (mine) {
+    // Renommé sur un autre appareil (la table teams n'est pas dans le temps réel : relu ici, à chaque resynchro).
+    if (current?.team.id === teamId && current.coachId === coachId && current.team.name !== mine.name) {
+      current = { coachId, team: { ...current.team, name: mine.name } };
+      knownNames.set(teamId, mine.name);
+      hooks.onTeamRenamed({ id: teamId, name: mine.name });
+    }
+    return 'member';
+  }
   const wasOpen = forgetTeam(coachId, teamId);
   hooks.toast(`Tu n'as plus accès à l'espace « ${name} »`);
   if (wasOpen) {

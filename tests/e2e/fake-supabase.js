@@ -64,6 +64,7 @@ export async function installFakeSupabase(target, opts = {}) {
     clockOffsetMs: opts.clock !== undefined ? new Date(opts.clock).getTime() - Date.now() : 0,
     signedTokens: new Map(),
     offline: false, // vrai : toute requête est coupée comme si le réseau était absent
+    refreshDelayMs: 0, // > 0 : les renouvellements de jeton répondent après ce délai
     storageDown: false, // vrai : le stockage répond 503 (sauf la lecture d'une URL signée)
   };
   const calls = [];
@@ -604,6 +605,10 @@ export async function installFakeSupabase(target, opts = {}) {
     if (state.offline) {
       await route.abort('internetdisconnected');
       return;
+    }
+    // Renouvellement de jeton lent (réseau dégradé) : la réponse arrive après state.refreshDelayMs.
+    if (kind === 'auth' && state.refreshDelayMs && request.method() === 'POST' && /grant_type=refresh_token/.test(request.url())) {
+      await new Promise((r) => setTimeout(r, state.refreshDelayMs));
     }
     if (request.method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: cors(headers) });

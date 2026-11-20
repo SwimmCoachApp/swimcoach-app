@@ -170,3 +170,40 @@ test('renommer l’espace, quitter un espace partagé, créer un autre espace', 
   expect(fake.state.tables.team_members.filter((m) => m.team_id === TA).map((m) => m.coach_id)).toEqual([fake.coachId('c@toac.fr')]);
   await ctxA.close();
 });
+
+test('renommage lent puis changement d’espace : l’en-tête garde le nom du nouvel espace', async ({ browser }) => {
+  const ctxA = await browser.newContext();
+  const fake = await installFakeSupabase(ctxA, seed());
+  fake.addTeam({ id: '77777777-7777-4777-8777-777777777777', name: 'Zèbre' });
+  fake.addMember('77777777-7777-4777-8777-777777777777', 'a@toac.fr');
+  const pageA = await ctxA.newPage();
+  await login(pageA, 'a@toac.fr');
+  await expect(pageA.locator('[data-team-name]')).toHaveText('Pôle <i>Formation</i>');
+  await settings(pageA);
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  await pageA.route('**/rest/v1/rpc/rename_team', async (route) => { await gate; await route.fallback(); });
+  await pageA.getByLabel("Nom de l'espace").fill('Ancien renommé');
+  await pageA.getByRole('button', { name: 'Renommer' }).click();
+  await pageA.locator('.top-bar-team').click();
+  await pageA.getByRole('button', { name: 'Zèbre' }).click();
+  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(pageA.locator('[data-team-name]')).toHaveText('Zèbre');
+  release();
+  await expect.poll(() => fake.state.tables.teams.find((t) => t.id === TA).name).toBe('Ancien renommé');
+  await pageA.waitForTimeout(500);
+  await expect(pageA.locator('[data-team-name]')).toHaveText('Zèbre');
+  await ctxA.close();
+});
+
+test('renommé sur un autre appareil : l’en-tête suit à la resynchro', async ({ browser }) => {
+  const ctxA = await browser.newContext();
+  const fake = await installFakeSupabase(ctxA, seed());
+  const pageA = await ctxA.newPage();
+  await login(pageA, 'a@toac.fr');
+  await expect(pageA.locator('[data-team-name]')).toHaveText('Pôle <i>Formation</i>');
+  fake.state.tables.teams.find((t) => t.id === TA).name = 'Pôle Perf';
+  await nudge(pageA);
+  await expect(pageA.locator('[data-team-name]')).toHaveText('Pôle Perf');
+  await ctxA.close();
+});

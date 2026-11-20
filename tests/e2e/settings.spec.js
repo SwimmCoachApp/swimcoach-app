@@ -242,3 +242,57 @@ test('capture des réglages avec la section Espace (clair)', async ({ page }) =>
   await page.waitForTimeout(400);
   await page.screenshot({ path: process.env.SETTINGS_SHOT || 'test-results/settings-light.png', fullPage: true });
 });
+
+test('modifications refusées : seules celles de l’espace ouvert sont comptées, exportées et effacées', async ({ page }) => {
+  const fake = await open(page, seed({ teams: [{ id: TA, name: 'Alpha' }, { id: TB, name: 'Zèbre' }], members: [{ team_id: TA, email: 'a@toac.fr' }, { team_id: TB, email: 'a@toac.fr' }] }));
+  const A = fake.coachId('a@toac.fr');
+  await expect(page.locator('[data-team-name]')).toHaveText('Alpha');
+  await page.evaluate(([a, ta, tb]) => {
+    const entry = (t, id) => ({ op: { id, table: 'swimmers', kind: 'upsert', key: id, row: { id, firstname: id }, coachId: a, teamId: t }, error: { code: '23514', status: 400, message: 'x' }, at: '2026-11-20T10:00:00.000Z' });
+    localStorage.setItem(`swimcoach2_${a}_${ta}_outbox_rejected`, JSON.stringify([entry(ta, 'alpha-1')]));
+    localStorage.setItem(`swimcoach2_${a}_${tb}_outbox_rejected`, JSON.stringify([entry(tb, 'zebre-1'), entry(tb, 'zebre-2')]));
+    localStorage.setItem(`swimcoach2_${a}_outboxTeams`, JSON.stringify([ta, tb]));
+  }, [A, TA, TB]);
+  await settings(page);
+  await expect(page.getByText('1 modification(s) refusée(s) par le serveur')).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Exporter' }).click();
+  const json = JSON.parse(await (await import('node:fs/promises')).readFile(await (await download).path(), 'utf8'));
+  expect(json.map((e) => e.op.key)).toEqual(['alpha-1']);
+  await page.getByRole('button', { name: 'Effacer' }).click();
+  await page.getByRole('dialog', { name: 'Effacer les modifications refusées ?' }).getByRole('button', { name: 'Effacer' }).click();
+  await expect(page.getByText('refusée(s) par le serveur')).toHaveCount(0);
+  const left = await page.evaluate(([a, ta, tb]) => [localStorage.getItem(`swimcoach2_${a}_${ta}_outbox_rejected`), JSON.parse(localStorage.getItem(`swimcoach2_${a}_${tb}_outbox_rejected`)).length], [A, TA, TB]);
+  expect(left).toEqual([null, 2]);
+});
+
+test('le compteur « en attente » ne compte que l’espace ouvert', async ({ page }) => {
+  const fake = await open(page, seed({ teams: [{ id: TA, name: 'Alpha' }, { id: TB, name: 'Zèbre' }], members: [{ team_id: TA, email: 'a@toac.fr' }, { team_id: TB, email: 'a@toac.fr' }] }));
+  const A = fake.coachId('a@toac.fr');
+  await page.evaluate(([a, tb]) => {
+    const op = (id) => ({ id, table: 'swimmers', kind: 'upsert', key: id, row: { id, team_id: tb }, coachId: a, teamId: tb });
+    localStorage.setItem(`swimcoach2_${a}_${tb}_outbox`, JSON.stringify([op('z1'), op('z2')]));
+    localStorage.setItem(`swimcoach2_${a}_outboxTeams`, JSON.stringify([tb]));
+  }, [A, TB]);
+  await settings(page);
+  await expect(page.getByText('Toutes les modifications sont envoyées')).toBeVisible();
+});
+
+test('fenêtre de confirmation : le focus va sur « Annuler » et reste dans la fenêtre', async ({ page }) => {
+  await open(page, seed({
+    users: [{ email: 'a@toac.fr', password: PW, activated: true }, { email: 'c@toac.fr', password: PW, activated: true }],
+    members: [{ team_id: TA, email: 'a@toac.fr' }, { team_id: TA, email: 'c@toac.fr' }],
+  }));
+  await settings(page);
+  await page.locator('.member-row', { hasText: 'c@toac.fr' }).getByRole('button', { name: 'Retirer' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: 'Retirer' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button', { name: 'Retirer' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});

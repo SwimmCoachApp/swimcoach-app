@@ -16,8 +16,19 @@ let coach = null;
 let recovering = false;
 let started = null;
 let getPendingCount = () => 0;
-/** Entraîneur qui vient de se déconnecter : un renouvellement de jeton en retard ne doit pas le reconnecter. */
+/**
+ * Entraîneur déconnecté alors que supabase-js renouvelait encore son jeton (attente dépassée) : jusqu'au
+ * rechargement de la page, aucun événement de session à son nom n'est accepté et sa session réécrite est effacée.
+ */
 let signedOutId = null;
+/**
+ * Recharge la page. Hors ligne sans service worker, le rechargement échouerait (page d'erreur du
+ * navigateur) : il attend alors le retour du réseau ; d'ici là, signedOutId écarte la session tardive.
+ */
+let reloadPage = () => {
+  if (navigator.onLine || navigator.serviceWorker?.controller) location.reload();
+  else window.addEventListener('online', () => location.reload(), { once: true });
+};
 let flushPending = async () => {};
 
 /** Attente maximale de l'envoi de la file avant une déconnexion. */
@@ -35,6 +46,7 @@ const recoveryListeners = new Set();
 export function configureSession(deps = {}) {
   if (deps.getPendingCount) getPendingCount = deps.getPendingCount;
   if (deps.flushPending) flushPending = deps.flushPending;
+  if (deps.reloadPage) reloadPage = deps.reloadPage;
 }
 
 /** @returns {{id: string, email: string, activated: boolean}|null} */
@@ -97,7 +109,7 @@ export function initSession() {
       }
       // Pas d'appel supabase directement dans ce rappel (verrou interne) : on diffère.
       if (event === 'SIGNED_OUT') setTimeout(() => setCoach(null), 0);
-      else if (event === 'TOKEN_REFRESHED' && session?.user && session.user.id === signedOutId) setTimeout(forgetLateSession, 0);
+      else if (signedOutId && session?.user?.id === signedOutId && event !== 'INITIAL_SESSION') setTimeout(forgetLateSession, 0);
       else if (session?.user && event !== 'INITIAL_SESSION') setTimeout(() => loadCoach(session.user), 0);
     });
     const { data } = await supabase.auth.getSession();
@@ -135,7 +147,6 @@ function authMessage(error) {
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw new Error(authMessage(error));
-  signedOutId = null; // après la connexion : un renouvellement en retard de l'ancien entraîneur reste ignoré
   await loadCoach(data.user);
 }
 
@@ -216,21 +227,22 @@ export async function signOut({ force = false } = {}) {
     await tryFlush(coach?.id);
     if (getPendingCount(coach?.id) > 0) return 'pending';
   }
-  signedOutId = coach?.id ?? null;
-  // Jeton expiré hors ligne : supabase-js tente de le renouveler (en boucle, jusqu'à 30 s) avant de
-  // déconnecter. On n'attend pas plus de FLUSH_WAIT_MS : la session locale est effacée ci-dessous.
+  const leaving = coach?.id ?? null;
+  // Jeton expiré sans réseau fiable : supabase-js tente de le renouveler (en boucle, jusqu'à 30 s, verrou
+  // pris) avant de déconnecter. On n'attend pas plus de FLUSH_WAIT_MS ; si l'attente est dépassée, ce
+  // renouvellement vit encore et pourrait réécrire la session (même par-dessus celle d'un autre
+  // entraîneur) : les données locales effacées, la page est rechargée pour tuer ce client.
   let timer;
-  try {
-    await Promise.race([
-      Promise.resolve().then(() => supabase.auth.signOut({ scope: 'local' })).catch(() => {}),
-      new Promise((resolve) => { timer = setTimeout(resolve, FLUSH_WAIT_MS); }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  const timedOut = await Promise.race([
+    Promise.resolve().then(() => supabase.auth.signOut({ scope: 'local' })).catch(() => {}).then(() => false),
+    new Promise((resolve) => { timer = setTimeout(() => resolve(true), FLUSH_WAIT_MS); }),
+  ]);
+  clearTimeout(timer);
+  if (timedOut) signedOutId = leaving;
   recovering = false;
   clearAllCoachData();
   setCoach(null);
+  if (timedOut) reloadPage();
   return 'done';
 }
 

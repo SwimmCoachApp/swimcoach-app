@@ -213,6 +213,10 @@ test('listRejected rassemble les refus de tous les espaces ; clearRejected les e
   const all = listRejected('A');
   expect(all.map((e) => [e.teamId, e.op.key, e.error.code])).toEqual([['T1', 'w1', '23514'], ['T2', 'w2', '23514']]);
   expect(listRejected('B')).toEqual([]);
+  expect(listRejected('A', 'T2').map((e) => e.op.key)).toEqual(['w2']);
+  clearRejected('A', 'T1');
+  expect(rejectedCount('T1', 'A')).toBe(0);
+  expect(rejectedCount('T2', 'A')).toBe(1);
   client.failWith = () => networkError();
   await flush(client, 'A', 'T2');
   clearRejected('A');

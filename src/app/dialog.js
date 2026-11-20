@@ -46,9 +46,22 @@ export function askConfirm(opts) {
       if (ev.target === overlay || btn?.dataset.dialog === 'cancel') close(false);
       else if (btn?.dataset.dialog === 'confirm' && !btn.disabled) close(true);
     });
-    overlay.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') close(false); });
+    overlay.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        close(false);
+        return;
+      }
+      if (ev.key !== 'Tab') return;
+      // Le focus reste dans la fenêtre (Tab / Maj+Tab bouclent).
+      const items = [...overlay.querySelectorAll('input, button')].filter((el) => !el.disabled);
+      const at = items.indexOf(document.activeElement);
+      const next = ev.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at === items.length - 1 ? 0 : at + 1);
+      ev.preventDefault();
+      items[next]?.focus();
+    });
     document.body.append(overlay);
-    (input ?? ok).focus();
+    // Jamais le bouton destructif par défaut : le champ à recopier, sinon « Annuler ».
+    (input ?? overlay.querySelector('[data-dialog="cancel"]')).focus();
   });
 }
 

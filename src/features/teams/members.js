@@ -14,7 +14,7 @@ import { flush, pendingCount } from '../../core/outbox.js';
 import { on } from '../../app/actions.js';
 import { askConfirm } from '../../app/dialog.js';
 import { toast } from '../../app/toast.js';
-import { setCurrentTeamName, switchTeam, leaveClosedTeam } from '../../app/shell.js';
+import { setCurrentTeamName, switchTeam, leaveClosedTeam, currentTeam } from '../../app/shell.js';
 
 const BUCKET = 'photos';
 /** Taille d'une page de lecture (et d'un lot de suppression) du stockage. */
@@ -292,11 +292,14 @@ on('space-rename', (btn) => busy(btn, async () => {
     toast(e.message);
     return;
   }
+  // Pendant l'appel, l'entraîneur a pu changer d'espace : l'en-tête ne doit pas prendre ce nom.
+  if (currentTeam()?.id !== team.id) return;
   ui.team = { ...team, name };
   try { await listMyTeams(); } catch { /* la liste sera relue au prochain routage */ }
+  if (currentTeam()?.id !== team.id) return;
   const coach = getCoach();
   if (coach) openTeam(coach.id, ui.team).catch(() => {}); // espace déjà ouvert : retient seulement le nouveau nom
-  setCurrentTeamName(name);
+  setCurrentTeamName(team.id, name);
   toast('Espace renommé');
 }));
 
