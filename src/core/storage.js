@@ -110,9 +110,16 @@ function makeStore(prefix) {
 
 /**
  * Stockage de l'application (clés `swimcoach2_<name>`).
- * @type {{get: (name: string) => any, set: (name: string, value: any) => boolean, remove: (name: string) => void, clear: () => void}}
+ * Pas de `clear` : il effacerait les données de tous les entraîneurs et la session
+ * (utiliser clearAllCoachData, qui garde APP_KEYS).
+ * @type {{get: (name: string) => any, set: (name: string, value: any) => boolean, remove: (name: string) => void, clear: () => never}}
  */
-export const appStore = makeStore(PREFIX);
+export const appStore = {
+  ...makeStore(PREFIX),
+  clear: () => {
+    throw new Error('appStore.clear est interdit : utiliser clearAllCoachData');
+  },
+};
 
 /**
  * Stockage d'un entraîneur (clés `swimcoach2_<coachId>_<name>`).
@@ -133,6 +140,39 @@ export function coachStore(coachId) {
  */
 export function teamStore(coachId, teamId) {
   return makeStore(`${PREFIX}${coachId}_${teamId}_`);
+}
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Espaces d'équipe qui ont au moins une clé sur cet appareil pour cet entraîneur
+ * (clés `swimcoach2_<coachId>_<uuid>_...`).
+ * @param {string} coachId
+ * @returns {string[]}
+ */
+export function storedTeamIds(coachId) {
+  const re = new RegExp(`^${escapeRe(PREFIX + coachId)}_(${UUID})_`, 'i');
+  const ids = new Set();
+  for (const key of listKeys()) {
+    const m = re.exec(key);
+    if (m) ids.add(m[1]);
+  }
+  return [...ids];
+}
+
+/**
+ * Entraîneurs qui ont au moins une clé sur cet appareil (clés `swimcoach2_<uuid>_...`).
+ * @returns {string[]}
+ */
+export function storedCoachIds() {
+  const re = new RegExp(`^${escapeRe(PREFIX)}(${UUID})_`, 'i');
+  const ids = new Set();
+  for (const key of listKeys()) {
+    const m = re.exec(key);
+    if (m) ids.add(m[1]);
+  }
+  return [...ids];
 }
 
 /**

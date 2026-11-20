@@ -157,3 +157,47 @@ describe('bilanPdfHtml', () => {
     expect(bilanPdfHtml('inconnu')).toBeNull();
   });
 });
+
+describe('import : résultats en double sur la clé d’unicité (même épreuve et même phase)', () => {
+  const perf = (code, phase, ms, status = 'ok', rank = 1) =>
+    ({ event_code: code, event_label: code, phase, time_ms: ms, time_display: String(ms), rank, points: 0, status, splits: [] });
+  const preview = () => ({
+    competitionId: '92968',
+    parsed: { competition: { name: 'Meeting', date: '2026-11-15', pool: 25 } },
+    matches: [{
+      swimmer: db.swimmers.get('leo'),
+      perfs: [
+        perf('51', 'finale', 30000, 'ok', 3), // demi-finale lue comme « finale »
+        perf('51', 'finale', 29500, 'ok', 1),
+        perf('52', 'finale', null, 'dsq'),
+        perf('52', 'finale', 41000, 'ok'),
+        perf('53', 'finale', null, 'dns', 1),
+        perf('53', 'finale', null, 'dsq', 2),
+        perf('54', 'series', 50000, 'ok'),
+      ],
+    }],
+  });
+
+  it('une seule ligne par clé : le meilleur temps valide, sinon la dernière', () => {
+    const rows = buildPerfRows(preview());
+    expect(rows).toHaveLength(4);
+    const by = Object.fromEntries(rows.map((r) => [r.event_code, r]));
+    expect(by['51']).toMatchObject({ time_ms: 29500, rank: 1 });
+    expect(by['52']).toMatchObject({ time_ms: 41000, status: 'ok' });
+    expect(by['53']).toMatchObject({ status: 'dsq', rank: 2 });
+    expect(by['54'].time_ms).toBe(50000);
+  });
+
+  it("l'aperçu signale les résultats regroupés", () => {
+    const p = preview();
+    const rows = buildPerfRows(p);
+    const html = importPreviewHtml({ ...p, ignoredArchived: [], perfCount: rows.length, merged: 3 });
+    expect(html).toContain('3 résultats regroupés (même épreuve et même phase)');
+    expect(importPreviewHtml({ ...p, ignoredArchived: [], perfCount: rows.length, merged: 0 })).not.toContain('regroupé');
+  });
+
+  it('importCompetition compte les regroupements (0 sur la page de test)', async () => {
+    vi.stubGlobal('fetch', async () => okResponse(FIXTURE));
+    expect((await importCompetition('92968')).merged).toBe(0);
+  });
+});

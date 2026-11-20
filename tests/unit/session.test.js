@@ -124,3 +124,25 @@ describe('déconnexion dont l’attente est dépassée : pas de réécriture de 
     expect(isReloadPending()).toBe(true);
   });
 });
+
+test("connexion d'un entraîneur : les données des autres entraîneurs sans écriture en attente ni refus sont effacées", async () => {
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const C = '33333333-3333-4333-8333-333333333333';
+  const T = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  localStorage.setItem(`swimcoach2_${A}_teams`, '[]');
+  localStorage.setItem(`swimcoach2_${A}_${T}_cache`, '{}');
+  localStorage.setItem(`swimcoach2_${C}_${T}_outbox_rejected`, '[{}]');
+  localStorage.setItem(`swimcoach2_${C}_outboxTeams`, JSON.stringify([T]));
+  localStorage.setItem(`swimcoach2_${B}_teams`, '[]');
+  localStorage.setItem('swimcoach2_theme', '"light"');
+  localStorage.setItem('swimcoach2_auth', 'S');
+  auth.signInWithPassword.mockResolvedValueOnce({ data: { user: { id: B, email: 'b@toac.fr' } }, error: null });
+  await signIn('b@toac.fr', 'motdepasse-long');
+  expect(Object.keys(localStorage).filter((k) => k.startsWith(`swimcoach2_${A}_`))).toEqual([]);
+  expect(localStorage.getItem(`swimcoach2_${C}_${T}_outbox_rejected`)).toBe('[{}]'); // gardées sous le préfixe de C
+  expect(localStorage.getItem(`swimcoach2_${C}_outboxTeams`)).not.toBeNull();
+  expect(localStorage.getItem(`swimcoach2_${B}_teams`)).toBe('[]');
+  expect(localStorage.getItem('swimcoach2_theme')).toBe('"light"');
+  expect(localStorage.getItem('swimcoach2_auth')).toBe('S');
+});

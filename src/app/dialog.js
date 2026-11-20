@@ -64,8 +64,3 @@ export function askConfirm(opts) {
     (input ?? overlay.querySelector('[data-dialog="cancel"]')).focus();
   });
 }
-
-/** Ferme la fenêtre ouverte (réponse : non). */
-export function closeConfirm() {
-  current?.close(false);
-}

@@ -6,7 +6,7 @@
  */
 import { db } from '../../core/store.js';
 import { dateKey } from '../../core/dates.js';
-import { seasonOfDateKey, swimmerInSeason, currentSeason } from '../../core/season.js';
+import { seasonOfDateKey, swimmerInSeason } from '../../core/season.js';
 import { monthName } from '../calendar/logic.js';
 
 const km = (s) => parseFloat(s.km) || 0;
@@ -38,11 +38,6 @@ export function shiftPeriod(p, delta) {
 /** @param {Date} [now] @returns {{scope: 'month', y: number, m0: number}} le mois en cours */
 export function currentMonth(now = new Date()) {
   return { scope: 'month', y: now.getFullYear(), m0: now.getMonth() };
-}
-
-/** @param {Date} [now] */
-export function currentSeasonPeriod(now = new Date()) {
-  return { scope: 'season', y: currentSeason(now) };
 }
 
 function inPeriod(date, { scope, y, m0 }) {

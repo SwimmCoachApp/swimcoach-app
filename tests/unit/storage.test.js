@@ -23,3 +23,22 @@ test("teamStore.clear n'efface qu'un espace", () => {
   coachStore('A').clear(); expect(teamStore('A','T2').get('s')).toBeNull();
 });
 test('JSON corrompu → null, pas d’exception', () => { localStorage.setItem('swimcoach2_A_s','{'); expect(coachStore('A').get('s')).toBeNull(); });
+
+test("appStore.clear est interdit (il effacerait tous les entraîneurs et la session)", () => {
+  localStorage.setItem('swimcoach2_auth', 'S');
+  expect(() => appStore.clear()).toThrow();
+  expect(localStorage.getItem('swimcoach2_auth')).toBe('S');
+});
+
+test('storedCoachIds / storedTeamIds ne relèvent que des identifiants uuid', async () => {
+  const { storedCoachIds, storedTeamIds } = await import('../../src/core/storage.js');
+  localStorage.clear();
+  const A = '11111111-1111-4111-8111-111111111111';
+  const T = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  localStorage.setItem('swimcoach2_auth', 'S');
+  localStorage.setItem('swimcoach2_theme', '"dark"');
+  localStorage.setItem(`swimcoach2_${A}_teams`, '[]');
+  localStorage.setItem(`swimcoach2_${A}_${T}_cache`, '{}');
+  expect(storedCoachIds()).toEqual([A]);
+  expect(storedTeamIds(A)).toEqual([T]);
+});

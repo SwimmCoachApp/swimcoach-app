@@ -59,13 +59,39 @@ export async function fetchLiveFFN(competitionId, { timeoutMs = FETCH_TIMEOUT_MS
 /** Clé d'unicité d'une perf (contrainte de la table). */
 const perfKey = (p) => `${p.swimmer_id}|${p.competition_id}|${p.event_code}|${p.phase ?? ''}`;
 
+const isValid = (r) => r.status === 'ok' && Number.isFinite(r.time_ms);
+
 /**
- * Lignes `performances` à enregistrer pour un aperçu (club4 confirmImportComp). Une perf déjà connue
- * localement garde son id ; sinon un id neuf (le serveur rapproche par la clé d'unicité).
+ * Regroupe les lignes qui partagent la clé d'unicité (team_id, swimmer_id, competition_id, event_code,
+ * phase) : sans cela l'une écraserait l'autre en silence à l'upsert (ex. demi-finale et finale lues
+ * toutes deux comme « finale »). Garde le meilleur temps valide (statut ok, temps le plus bas),
+ * sinon la dernière ligne lue.
+ * @param {object[]} rows
+ * @returns {{rows: object[], merged: number}} merged : nombre de lignes écartées
+ */
+export function dedupePerfRows(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = perfKey(row);
+    const prev = byKey.get(key);
+    if (!prev) byKey.set(key, row);
+    else if (isValid(row) ? !isValid(prev) || row.time_ms < prev.time_ms : !isValid(prev)) byKey.set(key, row);
+  }
+  return { rows: [...byKey.values()], merged: rows.length - byKey.size };
+}
+
+/**
+ * Lignes `performances` à enregistrer pour un aperçu (club4 confirmImportComp), une par clé
+ * d'unicité (voir dedupePerfRows). Une perf déjà connue localement garde son id ; sinon un id neuf
+ * (le serveur rapproche par la clé d'unicité).
  * @param {{competitionId: string, parsed: object, matches: object[]}} preview
  * @returns {object[]}
  */
 export function buildPerfRows(preview) {
+  return dedupePerfRows(collectPerfRows(preview)).rows;
+}
+
+function collectPerfRows(preview) {
   const comp = preview.parsed.competition;
   const compId = preview.competitionId;
   const compSeason = comp.date ? seasonOfDateKey(comp.date) : currentSeason();
@@ -105,7 +131,7 @@ export function buildPerfRows(preview) {
  * Récupère et lit une compétition, puis la rapproche des nageurs de l'espace : c'est l'aperçu.
  * `confirm()` enregistre les perfs (une écriture par perf, upsert sur la clé d'unicité).
  * @param {string} compId
- * @returns {Promise<{competitionId: string, parsed: object, matches: object[], ignoredArchived: object[], unmatched: object[], perfCount: number, confirm: () => number}>}
+ * @returns {Promise<{competitionId: string, parsed: object, matches: object[], ignoredArchived: object[], unmatched: object[], perfCount: number, merged: number, confirm: () => number}>}
  * @throws {PerfsError}
  */
 export async function importCompetition(compId) {
@@ -115,8 +141,10 @@ export async function importCompetition(compId) {
   const parsed = parseLiveFFNHTML(html);
   if (!parsed.swimmers || parsed.swimmers.length === 0) throw new PerfsError('Aucun nageur TOAC trouvé pour cette compétition');
   const { matched, unmatched, ignoredArchived } = matchSwimmersToDB(parsed.swimmers, parsed.competition.date, [...db.swimmers.values()]);
-  const preview = { competitionId: String(compId), parsed, matches: matched, ignoredArchived, unmatched, perfCount: 0 };
-  preview.perfCount = buildPerfRows(preview).length;
+  const preview = { competitionId: String(compId), parsed, matches: matched, ignoredArchived, unmatched, perfCount: 0, merged: 0 };
+  const built = dedupePerfRows(collectPerfRows(preview));
+  preview.perfCount = built.rows.length;
+  preview.merged = built.merged;
   preview.confirm = () => {
     if (!isOpen(ctx)) throw new PerfsError("L'espace a changé : relance l'import");
     const rows = buildPerfRows(preview);

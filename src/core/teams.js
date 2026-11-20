@@ -4,20 +4,16 @@
  */
 import { supabase } from './supabase.js';
 import { getCoach, onCoachChange } from './session.js';
-import { coachStore } from './storage.js';
+import { coachStore, teamStore, storedTeamIds } from './storage.js';
+import { getContext } from './store.js';
+import { dropTeam } from './outbox.js';
 
 /** @type {{coachId: string, teams: {id: string, name: string}[]}|null} */
 let cache = null;
-const listeners = new Set();
 
 onCoachChange((c) => {
   if (!c || cache?.coachId !== c.id) cache = null;
 });
-
-function notify() {
-  const team = getCurrentTeam();
-  for (const cb of [...listeners]) cb(team);
-}
 
 /** Message français pour une erreur de fonction serveur. */
 function teamError(error) {
@@ -28,8 +24,28 @@ function teamError(error) {
 }
 
 /**
+ * Efface sur cet appareil (file, refus, cache) les espaces auxquels l'entraîneur n'a plus accès :
+ * présents dans l'ancienne liste ou dans les clés stockées, absents de la liste lue sur le serveur.
+ * Sans toast. L'espace ouvert est laissé à checkMembership (sync.js), qui le ferme et prévient.
+ * @param {string} coachId
+ * @param {{id: string}[]} previous
+ * @param {{id: string}[]} next liste lue avec succès sur le serveur
+ */
+function purgeLostTeams(coachId, previous, next) {
+  const keep = new Set(next.map((t) => t.id));
+  const open = getContext();
+  const known = new Set([...previous.map((t) => t.id), ...storedTeamIds(coachId)]);
+  for (const id of known) {
+    if (keep.has(id) || (open?.coachId === coachId && open.teamId === id)) continue;
+    dropTeam(coachId, id);
+    teamStore(coachId, id).clear();
+  }
+}
+
+/**
  * Liste les espaces dont l'entraîneur est membre, après avoir réclamé ses invitations.
- * Hors ligne : renvoie la dernière liste connue.
+ * Hors ligne : renvoie la dernière liste connue (rien n'est effacé). Lecture réussie : les espaces
+ * disparus de la liste sont effacés de l'appareil (voir purgeLostTeams).
  * @returns {Promise<{id: string, name: string}[]>}
  */
 export async function listMyTeams() {
@@ -39,7 +55,10 @@ export async function listMyTeams() {
   await supabase.rpc('claim_my_invites'); // sans effet bloquant : une erreur n'empêche pas la liste
   const { data, error } = await supabase.from('teams').select('id, name').order('name');
   const teams = error ? store.get('teams') ?? [] : data.map((t) => ({ id: t.id, name: t.name }));
-  if (!error) store.set('teams', teams);
+  if (!error) {
+    purgeLostTeams(coach.id, store.get('teams') ?? [], teams);
+    store.set('teams', teams);
+  }
   cache = { coachId: coach.id, teams };
   return teams;
 }
@@ -61,13 +80,6 @@ export function setCurrentTeam(id) {
   const coach = getCoach();
   if (!coach || !cache?.teams.some((t) => t.id === id)) return;
   coachStore(coach.id).set('team', id);
-  notify();
-}
-
-/** @param {(team: {id: string, name: string}|null) => void} cb @returns {() => void} */
-export function onTeamChange(cb) {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
 }
 
 /**
@@ -87,6 +99,5 @@ export async function createTeam(name) {
   cache = { coachId: coach.id, teams };
   coachStore(coach.id).set('teams', teams);
   coachStore(coach.id).set('team', data);
-  notify();
   return data;
 }

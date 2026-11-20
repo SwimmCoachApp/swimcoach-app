@@ -181,7 +181,7 @@ export function detailParts(swimmerId, filters, now = new Date()) {
 
 /**
  * Aperçu d'une compétition avant import.
- * @param {{parsed: object, matches: object[], ignoredArchived: object[], perfCount: number}} preview
+ * @param {{parsed: object, matches: object[], ignoredArchived: object[], perfCount: number, merged?: number}} preview
  * @returns {string}
  */
 export function importPreviewHtml(preview) {
@@ -209,6 +209,7 @@ export function importPreviewHtml(preview) {
       ${p.pool ? raw(html`<span class="ic-pool">Bassin ${p.pool}m</span>`) : ''}
     </div>
     <div class="import-summary" id="import-summary">${summary}</div>
+    ${preview.merged ? raw(html`<div class="import-match-sub import-merged">${plural(preview.merged, 'résultat')} ${preview.merged > 1 ? 'regroupés' : 'regroupé'} (même épreuve et même phase)</div>`) : ''}
     <h3 class="perfs-section-label">Nageurs trouvés dans ton groupe</h3>
     <div id="import-matches-list">${raw(ignHtml)}${raw(rows)}</div>
     ${preview.matches.length === 0 ? raw('<div class="import-empty">Aucun de tes nageurs n\'a participé à cette compétition.</div>') : ''}`;

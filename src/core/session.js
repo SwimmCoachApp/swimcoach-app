@@ -6,7 +6,7 @@
  * d'activation change (pas à chaque renouvellement de jeton).
  */
 import { supabase } from './supabase.js';
-import { coachStore, clearAllCoachData, appStore, blockAuthWrites } from './storage.js';
+import { coachStore, clearAllCoachData, appStore, blockAuthWrites, storedCoachIds } from './storage.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 export const MSG_PASSWORD_SHORT = 'Le mot de passe doit faire au moins 10 caractères';
@@ -78,12 +78,29 @@ export function onPasswordRecovery(cb) {
   return () => recoveryListeners.delete(cb);
 }
 
+/**
+ * Un entraîneur arrive (connexion, session retrouvée) : les données laissées par d'autres entraîneurs
+ * sur cet appareil (déconnexion subie, compte supprimé ailleurs) sont effacées, sauf celles d'un
+ * entraîneur qui a encore des écritures en attente ou refusées : elles restent sous son préfixe,
+ * jamais envoyées sous un autre jeton.
+ * @param {string} keepId entraîneur qui arrive
+ */
+function purgeOtherCoaches(keepId) {
+  for (const id of storedCoachIds()) {
+    if (id === keepId) continue;
+    const pending = coachStore(id).get('outboxTeams');
+    if (Array.isArray(pending) && pending.length) continue;
+    coachStore(id).clear();
+  }
+}
+
 function setCoach(next) {
   const same = (!coach && !next) || (coach && next && coach.id === next.id && coach.activated === next.activated && coach.email === next.email);
   // Un autre entraîneur prend la place sans déconnexion : les écritures en attente de l'ancien ne
   // doivent jamais partir sous le nouveau. On efface les données de l'ancien seulement (pas la
   // session d'authentification ni les données du nouveau, que clearAllCoachData effacerait).
   if (coach && next && coach.id !== next.id && getPendingCount(coach.id) > 0) coachStore(coach.id).clear();
+  if (next && coach?.id !== next.id) purgeOtherCoaches(next.id);
   coach = next;
   if (!same) for (const cb of [...coachListeners]) cb(coach);
 }
