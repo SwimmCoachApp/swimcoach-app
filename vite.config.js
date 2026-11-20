@@ -26,7 +26,7 @@ export default defineConfig({
         // Précache des seuls fichiers de l'application (build). Aucune règle de cache à l'exécution :
         // les réponses de Supabase (/rest/v1/, /auth/v1/, /storage/v1/, /functions/v1/) ne sont jamais
         // mises en cache par le service worker ; les données hors ligne viennent du stockage local.
-        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,webp,woff2}'],
         globIgnores: ['splash.png', 'icons/icon-1024.png'], // sources des stores, inutiles hors ligne
         runtimeCaching: [],
         navigateFallback: 'index.html',
