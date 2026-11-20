@@ -112,8 +112,17 @@
   padding: 0 28px;
   text-align: center;
 }
-.welcome-art { width: 100%; max-width: 300px; margin: 0 auto 18px; }
-.welcome-art svg { width: 100%; height: auto; display: block; }
+.welcome-shot {
+  height: clamp(200px, calc(100dvh - 420px), 470px);
+  aspect-ratio: 390 / 700;
+  margin: 0 auto 16px;
+  border-radius: 26px;
+  border: 3px solid #1E3560;
+  outline: 1px solid #2B4A80;
+  overflow: hidden;
+  background: #0A1730;
+}
+.welcome-shot img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: top; }
 .welcome-title { margin: 0 0 8px; font-family: 'Bricolage Grotesque', Inter, system-ui, sans-serif; font-size: 24px; font-weight: 800; }
 .welcome-text { margin: 0 auto; max-width: 320px; font-size: 15px; line-height: 1.5; color: #A9B8D4; }
 .welcome-dots { display: flex; justify-content: center; gap: 6px; margin-top: 18px; }
@@ -127,4 +136,4 @@
 .welcome-privacy { align-self: center; font-size: 12px; color: #A9B8D4; padding: 4px; }
 .auth-back { align-self: flex-start; padding: 6px 0; font: inherit; font-size: 14px; background: none; border: 0; color: var(--accent, #1a5fb4); cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .welcome-track { scroll-behavior: auto; } }
-@media (max-height: 640px) { .welcome-art { max-width: 220px; margin-bottom: 10px; } .welcome-title { font-size: 20px; } .welcome-text { font-size: 14px; } }
+@media (max-height: 640px) { .welcome-shot { margin-bottom: 10px; } .welcome-title { font-size: 20px; } .welcome-text { font-size: 14px; } }
