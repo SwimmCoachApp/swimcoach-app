@@ -41,6 +41,22 @@ test('le nom de l’espace est échappé et la liste permet de changer d’espac
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
 });
 
+test('changer de groupe garde l’écran ouvert (Nageurs, puis Réglages)', async ({ page }) => {
+  await open(page, [{ id: T1, name: 'Alpha' }, { id: T2, name: 'Zèbre' }]);
+  await page.getByRole('button', { name: 'Nageurs', exact: true }).click();
+  await expect(page.locator('[data-screen="contacts"]')).toBeVisible();
+  await page.locator('.top-bar-team').click();
+  await page.getByRole('button', { name: 'Zèbre' }).click();
+  await expect(page.locator('.top-bar-team')).toContainText('Zèbre');
+  await expect(page.locator('[data-screen="contacts"]')).toBeVisible();
+  await expect(page.locator('.nav-item.active')).toHaveAttribute('data-key', 'contacts');
+  await page.getByRole('button', { name: 'Réglages' }).click();
+  await page.locator('.top-bar-team').click();
+  await page.getByRole('button', { name: 'Alpha' }).click();
+  await expect(page.locator('.top-bar-team')).toContainText('Alpha');
+  await expect(page.locator('[data-screen="settings"]')).toBeVisible();
+});
+
 test('changement d’espace : écran de chargement tant que le nouveau groupe n’est pas ouvert, jamais les données de l’ancien', async ({ page }) => {
   await open(page, [{ id: T1, name: 'Alpha' }, { id: T2, name: 'Zèbre' }]);
   let release;

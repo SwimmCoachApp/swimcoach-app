@@ -155,13 +155,14 @@ test('renommer l’espace, quitter un groupe partagé, créer un autre groupe', 
   await pageA.getByLabel('Nom du nouveau groupe').fill('Loisirs adultes');
   await pageA.getByRole('button', { name: "Créer le groupe" }).click();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Loisirs adultes');
-  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  // créé depuis les Réglages : on y reste dans le nouveau groupe
+  await expect(pageA.locator('[data-screen="settings"]')).toBeVisible();
 
   // retour sur l'espace partagé, puis départ volontaire
   await pageA.locator('.top-bar-team').click();
   await pageA.getByRole('button', { name: 'Pôle Perf' }).click();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Pôle Perf');
-  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(pageA.locator('[data-screen="settings"]')).toBeVisible();
   await settings(pageA);
   await pageA.locator('.member-row', { hasText: 'a@toac.fr' }).getByRole('button', { name: "Quitter le groupe" }).click();
   await pageA.getByRole('dialog', { name: "Quitter le groupe « Pôle Perf » ?" }).getByRole('button', { name: 'Quitter' }).click();
@@ -187,7 +188,7 @@ test('renommage lent puis changement d’espace : l’en-tête garde le nom du n
   await pageA.getByRole('button', { name: 'Renommer' }).click();
   await pageA.locator('.top-bar-team').click();
   await pageA.getByRole('button', { name: 'Zèbre' }).click();
-  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(pageA.locator('[data-screen="settings"]')).toBeVisible();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Zèbre');
   release();
   await expect.poll(() => fake.state.tables.teams.find((t) => t.id === TA).name).toBe('Ancien renommé');

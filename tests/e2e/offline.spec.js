@@ -95,7 +95,8 @@ test('le lien « Confidentialité » de la connexion ouvre la page, avec retour 
   await page.goto('/');
   await page.getByRole('link', { name: 'Confidentialité' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Confidentialité' })).toBeVisible();
-  await expect(page.getByText('Version provisoire — à valider par le club')).toBeVisible();
+  await expect(page.getByText(/Le responsable de traitement est le créateur et éditeur de l'application/)).toBeVisible();
+  await expect(page.locator('main')).not.toContainText('à compléter');
   await expect(page.getByText('eu-west-1')).toBeVisible();
   await page.getByRole('link', { name: /Retour à l'application/ }).click();
   await expect(page.getByRole('button', { name: 'Se connecter' })).toBeVisible();

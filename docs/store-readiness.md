@@ -8,7 +8,7 @@ Case cochée : fait dans le dépôt. Case vide : à la charge de Damien ou du cl
 - [x] `capacitor.config.json` (identifiant **provisoire** `fr.toacnatation.swimcoach`, nom « SwimCoach App », `webDir` `dist`). Aucun paquet Capacitor installé, pas de dossiers `ios/` ni `android/`.
 - [x] Icône source 1024 px : `public/icons/icon-1024.png` ; écran de démarrage : `public/splash.png`. Fabriqués par `node scripts/make-store-assets.mjs` à partir du nageur du thème Club (`src/app/scene.js`).
 - [x] Suppression du compte depuis l'application (Réglages, Compte) et mot de passe oublié.
-- [x] Page de confidentialité publique `public/privacy.html` (liée depuis la connexion et les Réglages), **version provisoire à valider par le club**.
+- [x] Page de confidentialité publique `public/privacy.html` (liée depuis la connexion et les Réglages), **rédigée le 20/11/2026** : responsable = l'éditeur (Damien), contact swimcoachapp@gmail.com, durées de conservation fixées.
 - [x] Procédure du compte de démonstration : `docs/demo-account.md`.
 - [x] Fonctionnement hors ligne : précache du service worker (fichiers de l'application seulement, jamais les réponses Supabase), données locales, file d'envoi (test `tests/e2e/offline.spec.js`).
 
@@ -23,9 +23,10 @@ Compilation
 - [ ] Choix de l'**éditeur** (le club ou Damien) et de l'**identifiant d'application** (bundle id) : **définitif une fois publié**, à confirmer avant le premier envoi (valeur provisoire actuelle : `fr.toacnatation.swimcoach`).
 
 Données et RGPD
-- [ ] **Décision RGPD du club** : valider `privacy.html`, fixer la **durée de conservation** (aujourd'hui « à définir par le club ») et renseigner le **contact** (« à compléter par le club »). Les mentions s'appliquent à des données de mineurs.
+- [x] Responsable, contact et durées de conservation renseignés dans `privacy.html` (l'éditeur, pas le club).
+- [ ] Appliquer les durées de conservation : purge automatique (comptes inactifs 3 ans, nageurs archivés et séances après 3 saisons, invitations après 1 an) à mettre en place ; boîte d'envoi Gmail à vider après 1 an.
 - [ ] Passer Supabase à l'**offre payante** avant de saisir de vraies données de mineurs (le projet gratuit est réservé à la construction).
-- [ ] Vérifier les contrats de sous-traitance (**DPA**) de Supabase et du prestataire SMTP, et les citer dans `privacy.html`.
+- [ ] Vérifier les contrats de sous-traitance (**DPA**) de Supabase et de Google (SMTP Gmail), et les citer dans `privacy.html`.
 - [ ] La boîte e-mail du compte de démonstration doit être lisible par le club (confirmation, réinitialisation).
 - [ ] **SMTP** : service d'envoi (Brevo, Resend…) avec une adresse d'expéditeur au nom du club, pour les e-mails de confirmation et de réinitialisation.
 - [ ] **Code du club** : choisir le code d'inscription initial.
