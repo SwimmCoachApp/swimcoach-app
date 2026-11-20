@@ -51,7 +51,15 @@
 .archived-badge{display:inline-block;padding:1px 7px;border-radius:8px;background:var(--bg4);color:var(--text2);font-size:10px;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:middle;}
 
 /* ── Fiche ── */
-.contact-popup{background:var(--modal-bg);border-radius:var(--radius) var(--radius) 0 0;padding:0 0 calc(var(--safe-b) + 12px);width:100%;max-width:430px;margin:0 auto;max-height:96vh;overflow-y:auto;animation:slideUp .28s cubic-bezier(.4,0,.2,1);}
+.contact-popup{background:var(--modal-bg);border-radius:var(--radius) var(--radius) 0 0;width:100%;max-width:430px;margin:0 auto;max-height:92vh;max-height:calc(100dvh - var(--safe-t) - 16px);display:flex;flex-direction:column;overflow:hidden;animation:slideUp .2s cubic-bezier(.2,0,.2,1);}
+/* Le haut de la fiche défile ; les boutons restent visibles en bas, au-dessus de la barre du téléphone. */
+.contact-popup-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.contact-popup-footer{flex-shrink:0;padding:12px 0 calc(var(--safe-b) + 12px);border-top:1px solid var(--border);background:var(--modal-bg);}
+.call-choices{margin:0 20px 10px;padding:10px;border-radius:14px;background:var(--bg3);display:flex;flex-direction:column;gap:6px;}
+.call-choices[hidden]{display:none;}
+.call-choices-title{font-size:12px;color:var(--text2);font-weight:700;padding:0 4px 2px;}
+.call-choice{display:block;padding:12px 14px;border-radius:12px;background:var(--green);color:#fff;font-weight:700;font-size:15px;text-decoration:none;}
+.call-choice:active{opacity:.75;}
 .contact-popup-header{display:flex;flex-direction:column;align-items:center;padding:20px 20px 16px;border-bottom:1px solid var(--border);position:relative;}
 .contact-popup-avatar{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--swim));display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;color:#fff;margin-bottom:12px;overflow:hidden;flex-shrink:0;position:relative;border:3px solid var(--border2);}
 .contact-popup-name{font-family:var(--font-display);font-size:22px;text-align:center;overflow-wrap:anywhere;}
@@ -64,12 +72,13 @@
 .field-info{flex:1;min-width:0;}
 .field-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
 .field-value{font-size:15px;margin-top:2px;overflow-wrap:anywhere;}
-.contact-action-btns{display:flex;gap:10px;padding:0 20px 4px;}
+.contact-action-btns{display:flex;gap:10px;padding:0 20px;}
 .contact-action-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:999px;font-size:14px;font-weight:700;text-decoration:none;}
 .contact-action-btn:active{opacity:.75;}
 .btn-call{background:var(--green);color:#fff;}
 .btn-mail{background:#FF5A36;color:#fff;}
-.contact-popup-actions{padding:0 20px;display:flex;gap:10px;margin-top:8px;}
+.contact-popup-actions{padding:0 20px;display:flex;gap:10px;}
+.contact-action-btns + .contact-popup-actions{margin-top:10px;}
 .btn-archive-ghost{background:transparent;color:var(--musc);border:1.5px solid var(--musc);padding:11px 14px;border-radius:999px;font-weight:700;font-size:14px;flex:1;}
 .btn-archive-ghost:active{background:var(--musc-bg);}
 .btn-restore-ghost{background:transparent;color:var(--plan);border:1.5px solid var(--plan);padding:11px 14px;border-radius:999px;font-weight:700;font-size:14px;flex:1;}

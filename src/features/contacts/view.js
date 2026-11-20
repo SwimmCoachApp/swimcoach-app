@@ -2,7 +2,7 @@
 import { html, raw } from '../../core/html.js';
 import { ageOn } from '../../core/dates.js';
 import { swimmerIsActive } from '../../core/season.js';
-import { groupLabel } from './logic.js';
+import { groupLabel, phoneNumbers } from './logic.js';
 import { FEATURES } from '../../core/features.js';
 
 const initials = (sw) => `${(sw.firstname || '')[0] || ''}${(sw.lastname || '')[0] || ''}`.toUpperCase();
@@ -79,36 +79,60 @@ function formatDob(dob) {
   return new Date(y, m - 1, d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-/** @param {object} sw @returns {string} contenu de la fiche */
+/**
+ * Fiche du nageur : le haut défile, les boutons (appeler, écrire, modifier, archiver) restent
+ * toujours visibles en bas de l'écran.
+ * @param {object} sw
+ * @returns {string} contenu de la fiche
+ */
 export function ficheHtml(sw) {
   const archived = !swimmerIsActive(sw);
   const age = sw.dob ? ageOn(sw.dob) : null;
+  const phones = phoneNumbers(sw.phone);
   const fields = [];
-  if (sw.phone) fields.push(['📞', 'Téléphone', sw.phone]);
+  if (phones.length) {
+    for (const p of phones) fields.push(['📞', p.label ? `Téléphone · ${p.label}` : 'Téléphone', p.display]);
+  } else if (sw.phone) {
+    fields.push(['📞', 'Téléphone', sw.phone]);
+  }
   if (sw.email) fields.push(['✉️', 'Email', sw.email]);
   fields.push(['🎂', 'Date de naissance', sw.dob ? formatDob(sw.dob) : 'Non renseignée']);
   if (age != null) fields.push(['🏅', 'Âge', `${age} ans`]);
-  const phone = (sw.phone || '').replace(/[^\d+]/g, '');
+  const callLabel = (p) => (p.label ? `${p.label} · ${p.display}` : p.display);
+  let call = '';
+  if (phones.length === 1) {
+    call = html`<a class="contact-action-btn btn-call" href="tel:${phones[0].tel}">📞 Appeler</a>`;
+  } else if (phones.length > 1) {
+    call = html`<button type="button" class="contact-action-btn btn-call" data-action="call-choose" aria-expanded="false" aria-controls="call-choices">📞 Appeler</button>`;
+  }
   return html`<div class="modal-handle"></div>
-    <div class="contact-popup-header">
-      <button type="button" class="contact-popup-avatar" data-action="edit-swimmer" data-id="${sw.id}" aria-label="Changer la photo">${raw(avatarHtml(sw))}</button>
-      <div class="contact-popup-name">${`${sw.firstname} ${sw.lastname}`.trim()}</div>
-      <div class="contact-popup-group">${[FEATURES.groups ? groupLabel(sw) || 'Sans groupe' : '', archived ? `archivé (${seasonLabel(sw.left_season)})` : ''].filter(Boolean).join(' · ')}</div>
-      <button type="button" class="contact-popup-close" data-action="close-modal" data-id="modal-contact" aria-label="Fermer">✕</button>
+    <div class="contact-popup-body">
+      <div class="contact-popup-header">
+        <button type="button" class="contact-popup-avatar" data-action="edit-swimmer" data-id="${sw.id}" aria-label="Changer la photo">${raw(avatarHtml(sw))}</button>
+        <div class="contact-popup-name">${`${sw.firstname} ${sw.lastname}`.trim()}</div>
+        <div class="contact-popup-group">${[FEATURES.groups ? groupLabel(sw) || 'Sans groupe' : '', archived ? `archivé (${seasonLabel(sw.left_season)})` : ''].filter(Boolean).join(' · ')}</div>
+        <button type="button" class="contact-popup-close" data-action="close-modal" data-id="modal-contact" aria-label="Fermer">✕</button>
+      </div>
+      <div class="contact-fields">${fields.map(([icon, label, val]) => raw(html`<div class="contact-field">
+        <div class="field-icon" aria-hidden="true">${icon}</div>
+        <div class="field-info"><div class="field-label">${label}</div><div class="field-value">${val}</div></div>
+      </div>`))}</div>
     </div>
-    <div class="contact-fields">${fields.map(([icon, label, val]) => raw(html`<div class="contact-field">
-      <div class="field-icon" aria-hidden="true">${icon}</div>
-      <div class="field-info"><div class="field-label">${label}</div><div class="field-value">${val}</div></div>
-    </div>`))}</div>
-    <div class="contact-action-btns">
-      ${sw.phone ? raw(html`<a class="contact-action-btn btn-call" href="tel:${phone}">📞 Appeler</a>`) : ''}
-      ${sw.email ? raw(html`<a class="contact-action-btn btn-mail" href="mailto:${encodeURIComponent(sw.email)}">✉️ Email</a>`) : ''}
-    </div>
-    <div class="contact-popup-actions">
-      <button type="button" class="btn-full btn-ghost" data-action="edit-swimmer" data-id="${sw.id}">✏️ Modifier</button>
-      ${archived
-        ? raw(html`<button type="button" class="btn-restore-ghost" data-action="restore" data-id="${sw.id}">↩ Restaurer</button>`)
-        : raw(html`<button type="button" class="btn-archive-ghost" data-action="ask-archive" data-id="${sw.id}">📦 Archiver</button>`)}
+    <div class="contact-popup-footer">
+      ${phones.length > 1 ? raw(html`<div class="call-choices" id="call-choices" hidden>
+        <div class="call-choices-title">Quel numéro appeler ?</div>
+        ${phones.map((p) => raw(html`<a class="call-choice" href="tel:${p.tel}">📞 ${callLabel(p)}</a>`))}
+      </div>`) : ''}
+      ${call || sw.email ? raw(html`<div class="contact-action-btns">
+        ${call ? raw(call) : ''}
+        ${sw.email ? raw(html`<a class="contact-action-btn btn-mail" href="mailto:${encodeURIComponent(sw.email)}">✉️ Email</a>`) : ''}
+      </div>`) : ''}
+      <div class="contact-popup-actions">
+        <button type="button" class="btn-full btn-ghost" data-action="edit-swimmer" data-id="${sw.id}">✏️ Modifier</button>
+        ${archived
+          ? raw(html`<button type="button" class="btn-restore-ghost" data-action="restore" data-id="${sw.id}">↩ Restaurer</button>`)
+          : raw(html`<button type="button" class="btn-archive-ghost" data-action="ask-archive" data-id="${sw.id}">📦 Archiver</button>`)}
+      </div>
     </div>`;
 }
 

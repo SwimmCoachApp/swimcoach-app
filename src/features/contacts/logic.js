@@ -181,3 +181,27 @@ export function groupMail(groupId, teamName) {
   const subject = encodeURIComponent(`${group}Message de ${teamName}`);
   return { count: emails.length, href: `mailto:?bcc=${emails.map(encodeURIComponent).join(',')}&subject=${subject}` };
 }
+
+/**
+ * Numéros d'un champ téléphone qui peut en contenir plusieurs (« 06 11 22 33 44 / 06 55 66 77 88 »,
+ * « Maman : 06… ; Papa : 07… », ou deux numéros séparés par un simple espace).
+ * @param {string|null|undefined} raw
+ * @returns {{tel: string, display: string, label: string}[]} tel : chiffres pour le lien tel: ;
+ *   display : numéro lisible ; label : texte autour du numéro (« Maman »), '' sinon
+ */
+export function phoneNumbers(raw) {
+  const out = [];
+  const parts = String(raw ?? '').split(/\s*(?:[/;,|\n]|\s(?:et|ou)\s)\s*/i);
+  for (const part of parts) {
+    const digits = part.replace(/[^\d+]/g, '');
+    // deux numéros français à 10 chiffres collés ou séparés seulement par des espaces ou un tiret
+    const chunks = /^0\d{19}$/.test(digits) && digits[10] === '0' ? [digits.slice(0, 10), digits.slice(10)] : [digits];
+    const label = chunks.length > 1 ? '' : part.replace(/[\d+().:\-–]/g, ' ').replace(/\s+/g, ' ').trim();
+    for (const tel of chunks) {
+      if (tel.replace(/\D/g, '').length < 6) continue;
+      const display = /^0\d{9}$/.test(tel) ? tel.replace(/(\d{2})(?=\d)/g, '$1 ') : tel;
+      out.push({ tel, display, label });
+    }
+  }
+  return out;
+}

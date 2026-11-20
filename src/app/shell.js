@@ -160,7 +160,16 @@ export function startApp(root, coach, team, leave) {
   showScreen(first);
 }
 
-on('nav', (el) => showScreen(el.dataset.key)); // sans effet pendant le chargement (voir showScreen)
+let navToken = 0;
+// L'onglet touché s'allume tout de suite ; l'écran est dessiné à l'image suivante, pour que le doigt
+// voie une réponse immédiate même si l'écran met un peu de temps à se construire. Dernier toucher gagnant.
+on('nav', (el) => {
+  const key = el.dataset.key;
+  if (!ctx || ctx.loading || !screens.has(key) || key === ctx.current) return;
+  const token = ++navToken;
+  for (const item of ctx.root.querySelectorAll('.nav-item')) item.classList.toggle('active', item.dataset.key === key);
+  requestAnimationFrame(() => setTimeout(() => { if (token === navToken) showScreen(key); }, 0));
+});
 on('close-modal', (el) => closeModal(el.dataset.id));
 on('close-backdrop', (el, ev) => { if (ev.target === el) closeModal(el.id); });
 on('toggle-theme', (el) => {
