@@ -11,6 +11,7 @@ import {
 import { currentTeamName } from '../../app/shell.js';
 import { parseImportFile, planImport, runImport, loadExcelReader, downloadTemplate, groupsToCreate } from './import.js';
 import { screenHtml, importChooseHtml, importPreviewHtml, listHtml, mailOptionsHtml, ficheHtml, formHtml, groupBlockHtml, deleteDialogHtml, archiveDialogHtml } from './view.js';
+import { FEATURES } from '../../core/features.js';
 
 const SEARCH_DELAY_MS = 150;
 const REOPEN_FICHE_MS = 350; // iOS PWA : laisser la feuille précédente se fermer
@@ -56,12 +57,15 @@ function refreshList() {
 
 /** Options du « Mail groupe » et lien prêt à ouvrir le client de messagerie. */
 function refreshMail() {
-  const select = el('group-mail-select');
+  const select = el('group-mail-select'); // absent quand les groupes sont masqués : mail à tous les actifs
   const link = el('group-mail-link');
-  if (!select || !link) return;
-  const groups = mailGroups();
-  const keep = groups.some((g) => g.id === select.value) ? select.value : 'all';
-  select.innerHTML = mailOptionsHtml(groups, keep);
+  if (!link) return;
+  let keep = 'all';
+  if (select) {
+    const groups = mailGroups();
+    keep = groups.some((g) => g.id === select.value) ? select.value : 'all';
+    select.innerHTML = mailOptionsHtml(groups, keep);
+  }
   const { href } = groupMail(keep, currentTeamName());
   link.setAttribute('href', href || '#');
 }
@@ -171,7 +175,7 @@ async function submitForm() {
       firstname: valueOf('sw-firstname'),
       lastname: valueOf('sw-lastname'),
       dob: valueOf('sw-dob'),
-      group_id: valueOf('sw-group') || null,
+      group_id: FEATURES.groups ? valueOf('sw-group') || null : undefined, // masqués : le nageur garde son groupe
       phone: valueOf('sw-phone'),
       email: valueOf('sw-email'),
       photo: online ? form.photo : null,
@@ -204,10 +208,11 @@ on('search', (input) => {
 }, 'input');
 on('mail-group', refreshMail, 'change');
 on('group-mail', (link, ev) => {
-  const { count } = groupMail(el('group-mail-select').value, currentTeamName());
+  const target = el('group-mail-select')?.value ?? 'all';
+  const { count } = groupMail(target, currentTeamName());
   if (count === 0) {
     ev.preventDefault();
-    toast(el('group-mail-select').value === 'all' ? 'Aucun nageur actif avec un email' : 'Aucun email dans ce groupe');
+    toast(target === 'all' ? 'Aucun nageur actif avec un email' : 'Aucun email dans ce groupe');
     return;
   }
   toast(`${count} destinataire${count > 1 ? 's' : ''}`);

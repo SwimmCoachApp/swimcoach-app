@@ -67,9 +67,9 @@ test('appel : cocher 12 nageurs sur 16, la jauge affiche « 12 / 16 présents »
   await login(page);
   await openRollCall(page);
   await expect(gauge(page)).toHaveText('0 / 16 présents');
-  // l'archivé d'une saison précédente n'est pas dans l'appel ; le groupe est affiché
+  // l'archivé d'une saison précédente n'est pas dans l'appel ; le groupe n'est pas affiché (groupes masqués)
   await expect(page.locator('#presence-list')).not.toContainText('Parti');
-  await expect(row(page, 1)).toContainText('Benjamins');
+  await expect(row(page, 1)).not.toContainText('Benjamins');
   await expect(page.locator('#pm-fill')).toHaveAttribute('style', /width: 0%/);
 
   for (let i = 1; i <= 12; i += 1) await row(page, i).click();

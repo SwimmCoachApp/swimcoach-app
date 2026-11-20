@@ -114,7 +114,7 @@ test('retiré de l’espace : 42501 au flush → checkMembership, cache et ops d
   expect(pendingCount('T1')).toBe(0);
   expect(pendingCount('T2')).toBe(1);
   expect(teamStore('A', 'T1').get('cache')).toBeNull();
-  expect(toast).toHaveBeenCalledWith("Tu n'as plus accès à l'espace « Benjamins »");
+  expect(toast).toHaveBeenCalledWith("Tu n'as plus accès au groupe « Benjamins »");
   expect(onTeamLost).toHaveBeenCalledWith({ id: 'T2', name: 'Avenirs' });
 });
 
@@ -123,7 +123,7 @@ test("accès perdu découvert par l'envoi en arrière-plan d'un espace quitté :
   myTeams = [{ id: 'T2', name: 'Avenirs' }];
   fake.client.failWith = () => rlsError();
   suspendTeam();
-  await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Tu n'as plus accès à l'espace « Benjamins »"));
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Tu n'as plus accès au groupe « Benjamins »"));
 });
 
 test('42501 alors que je suis toujours membre : l’op refusée est retirée, la suite part', async () => {
@@ -331,7 +331,7 @@ test("retrait d'un espace pendant qu'il est ouvert : détecté à la resynchro (
   startLive();
   myTeams = [{ id: 'T2', name: 'Avenirs' }];
   window.dispatchEvent(new Event('online'));
-  await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Tu n'as plus accès à l'espace « Benjamins »"));
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Tu n'as plus accès au groupe « Benjamins »"));
   expect(onTeamLost).toHaveBeenCalledWith({ id: 'T2', name: 'Avenirs' });
 });
 

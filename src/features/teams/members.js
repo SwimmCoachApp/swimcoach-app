@@ -22,8 +22,8 @@ export const STORAGE_PAGE = 100;
 /** Attente maximale de l'envoi de la file avant de quitter un espace. */
 const LEAVE_FLUSH_MS = 3000;
 
-export const MSG_LAST_MEMBER = "Tu es le dernier membre : supprime l'espace si tu n'en as plus besoin";
-export const MSG_PHOTOS_FAILED = "Impossible de supprimer les photos de l'espace (vérifie ta connexion) : l'espace n'a pas été supprimé";
+export const MSG_LAST_MEMBER = "Tu es le dernier membre : supprime le groupe si tu n'en as plus besoin";
+export const MSG_PHOTOS_FAILED = "Impossible de supprimer les photos du groupe (vérifie ta connexion) : le groupe n'a pas été supprimé";
 
 /** Message français pour une erreur de fonction serveur des espaces. */
 export function memberError(error) {
@@ -31,7 +31,7 @@ export function memberError(error) {
   if (/invalid_email/.test(m)) return 'Adresse e-mail invalide';
   if (/too_many_invites/.test(m)) return "Trop d'invitations, réessaie dans une heure";
   if (/last_member/.test(m)) return MSG_LAST_MEMBER;
-  if (/invalid_name/.test(m)) return "Le nom de l'espace doit faire entre 1 et 60 caractères";
+  if (/invalid_name/.test(m)) return "Le nom du groupe doit faire entre 1 et 60 caractères";
   if (/not_allowed/.test(m)) return "Tu n'as pas accès à cette action";
   if (/fetch|network|Failed/i.test(m) || error?.status === 0) return 'Connexion impossible, vérifie ta connexion internet';
   return 'Une erreur est survenue, réessaie';
@@ -176,7 +176,7 @@ function memberRowHtml(m, meId) {
       <div class="member-name">${m.name || m.email}${self ? raw(' <span class="member-self">(toi)</span>') : ''}</div>
       ${m.name ? raw(html`<div class="member-email">${m.email}</div>`) : ''}
     </div>
-    <button type="button" class="btn-sm btn-danger-ghost" data-action="member-remove" data-id="${m.id}">${self ? "Quitter l'espace" : 'Retirer'}</button>
+    <button type="button" class="btn-sm btn-danger-ghost" data-action="member-remove" data-id="${m.id}">${self ? "Quitter le groupe" : 'Retirer'}</button>
   </li>`;
 }
 
@@ -203,8 +203,8 @@ function listsHtml() {
  */
 export function spaceSectionHtml(team) {
   return html`<section class="settings-card" aria-labelledby="settings-space-title">
-    <h2 class="settings-title" id="settings-space-title">Espace</h2>
-    <label class="form-label" for="space-name">Nom de l'espace</label>
+    <h2 class="settings-title" id="settings-space-title">Mon groupe</h2>
+    <label class="form-label" for="space-name">Nom du groupe</label>
     <div class="settings-row">
       <input type="text" class="form-input" id="space-name" maxlength="60" autocomplete="off" value="${team.name}">
       <button type="button" class="btn-sm btn-accent" data-action="space-rename">Renommer</button>
@@ -217,12 +217,12 @@ export function spaceSectionHtml(team) {
     </div>
     <p class="settings-msg" data-members-msg role="status"></p>
     <p class="settings-note">Aucun e-mail n'est envoyé : préviens ton collègue toi-même.</p>
-    <label class="form-label settings-gap" for="space-new">Créer un autre espace</label>
+    <label class="form-label settings-gap" for="space-new">Créer un autre groupe</label>
     <div class="settings-row">
-      <input type="text" class="form-input" id="space-new" maxlength="60" autocomplete="off" placeholder="Nom du nouvel espace" aria-label="Nom du nouvel espace">
-      <button type="button" class="btn-sm btn-ghost" data-action="space-create">Créer l'espace</button>
+      <input type="text" class="form-input" id="space-new" maxlength="60" autocomplete="off" placeholder="Nom du nouveau groupe" aria-label="Nom du nouveau groupe">
+      <button type="button" class="btn-sm btn-ghost" data-action="space-create">Créer le groupe</button>
     </div>
-    <button type="button" class="btn-full btn-danger-ghost settings-gap" data-action="space-delete">Supprimer l'espace et toutes ses données</button>
+    <button type="button" class="btn-full btn-danger-ghost settings-gap" data-action="space-delete">Supprimer le groupe et toutes ses données</button>
   </section>`;
 }
 
@@ -283,7 +283,7 @@ on('space-rename', (btn) => busy(btn, async () => {
   const team = ui.team;
   const name = find('#space-name').value.trim();
   if (!name || name.length > 60) {
-    toast("Le nom de l'espace doit faire entre 1 et 60 caractères");
+    toast("Le nom du groupe doit faire entre 1 et 60 caractères");
     return;
   }
   try {
@@ -300,7 +300,7 @@ on('space-rename', (btn) => busy(btn, async () => {
   const coach = getCoach();
   if (coach) openTeam(coach.id, ui.team).catch(() => {}); // espace déjà ouvert : retient seulement le nouveau nom
   setCurrentTeamName(team.id, name);
-  toast('Espace renommé');
+  toast('Groupe renommé');
 }));
 
 on('member-add', (btn) => busy(btn, async () => {
@@ -337,15 +337,15 @@ on('member-remove', async (btn) => {
   const ok = await askConfirm(self
     ? {
       icon: '🚪',
-      title: `Quitter l'espace « ${team.name} » ?`,
+      title: `Quitter le groupe « ${team.name} » ?`,
       text: `Tu n'y auras plus accès sur aucun appareil, sauf si un membre t'ajoute de nouveau.${pending ? ` ${pending} modification(s) pas encore envoyée(s) seront perdues si le réseau manque.` : ''}`,
       confirm: 'Quitter',
       danger: true,
     }
     : {
       icon: '👋',
-      title: `Retirer ${member.name || member.email} de l'espace ?`,
-      text: "Il n'aura plus accès aux données de l'espace.",
+      title: `Retirer ${member.name || member.email} du groupe ?`,
+      text: "Il n'aura plus accès aux données du groupe.",
       confirm: 'Retirer',
       danger: true,
     });
@@ -364,7 +364,7 @@ on('member-remove', async (btn) => {
       return;
     }
     forgetTeam(coach.id, team.id);
-    toast(`Tu as quitté l'espace « ${team.name} »`);
+    toast(`Tu as quitté le groupe « ${team.name} »`);
     leaveClosedTeam();
   });
 });
@@ -387,11 +387,11 @@ on('space-delete', async (btn) => {
   if (!coach) return;
   const ok = await askConfirm({
     icon: '🗑',
-    title: `Supprimer l'espace « ${team.name} » ?`,
+    title: `Supprimer le groupe « ${team.name} » ?`,
     text: 'Toutes ses données (nageurs, séances, présences, planning, performances, photos) seront supprimées pour tous ses membres. Cette action est définitive.',
     typed: team.name,
-    typedLabel: "Tape le nom de l'espace pour confirmer",
-    confirm: "Supprimer l'espace",
+    typedLabel: "Tape le nom du groupe pour confirmer",
+    confirm: "Supprimer le groupe",
     danger: true,
   });
   if (!ok || ui.team !== team) return;
@@ -403,7 +403,7 @@ on('space-delete', async (btn) => {
       return;
     }
     forgetTeam(coach.id, team.id);
-    toast(`L'espace « ${team.name} » a été supprimé`);
+    toast(`Le groupe « ${team.name} » a été supprimé`);
     leaveClosedTeam();
   });
 });

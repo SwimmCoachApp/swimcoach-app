@@ -2,7 +2,7 @@
 import { html, raw } from '../../core/html.js';
 import { db } from '../../core/store.js';
 import { currentSeason, seasonOfDateKey } from '../../core/season.js';
-import { listSwimmers, groupName } from '../contacts/logic.js';
+import { listSwimmers, groupLabel } from '../contacts/logic.js';
 import { shortEventLabel } from './parse.js';
 import { perfsOf, seasonRange, swimmerSeasonPoints, swimmerSeasonRaces, bestTimes, byDateDesc, formatDateFR } from './logic.js';
 
@@ -374,7 +374,7 @@ export function bilanPdfHtml(swimmerId, { teamName = '', swimmerSvg = '', now = 
   const seasonRaces = swimmerSeasonRaces(swimmerId, season);
   const totalPts = perfs.filter((p) => p.status === 'ok' && p.points).reduce((s, p) => s + (parseInt(p.points, 10) || 0), 0);
   const dateGen = now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-  const group = groupName(sw);
+  const group = groupLabel(sw);
   const name = `${sw.firstname} ${sw.lastname}`;
 
   const allTimeRow = (p) => {

@@ -157,7 +157,7 @@ on('settings-clear-rejected', async () => {
   const ok = await askConfirm({
     icon: '🧹',
     title: 'Effacer les modifications refusées ?',
-    text: `${n} modification(s) refusée(s) par le serveur de l'espace « ${team.name} » seront oubliées sur cet appareil. Exporte-les d'abord pour en garder une trace.`,
+    text: `${n} modification(s) refusée(s) par le serveur du groupe « ${team.name} » seront oubliées sur cet appareil. Exporte-les d'abord pour en garder une trace.`,
     confirm: 'Effacer',
     danger: true,
   });
@@ -171,7 +171,7 @@ on('settings-delete-account', async (btn) => {
   const ok = await askConfirm({
     icon: '⚠️',
     title: 'Supprimer mon compte ?',
-    text: 'Les espaces dont tu es le seul membre seront supprimés avec leurs données (nageurs, séances, photos…). Tu quittes les espaces partagés, leurs données restent. Cette action est définitive.',
+    text: 'Les groupes dont tu es le seul membre seront supprimés avec leurs données (nageurs, séances, photos…). Tu quittes les groupes partagés, leurs données restent. Cette action est définitive.',
     typed: 'SUPPRIMER',
     typedLabel: 'Tape SUPPRIMER pour confirmer',
     confirm: 'Supprimer définitivement',

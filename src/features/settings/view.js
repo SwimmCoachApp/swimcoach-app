@@ -1,9 +1,20 @@
 /** Réglages : balisage (tous les textes variables passent par `html`, donc échappés). */
 import { html, raw } from '../../core/html.js';
+import { FEATURES } from '../../core/features.js';
+
+/** Section « Groupes » (affichée seulement si FEATURES.groups). */
+const GROUPS_SECTION = `<section class="settings-card" aria-labelledby="settings-groups-title">
+      <h2 class="settings-title" id="settings-groups-title">Groupes</h2>
+      <div id="settings-groups"></div>
+      <div class="settings-row">
+        <input type="text" class="form-input" id="settings-group-input" maxlength="40" autocomplete="off" placeholder="Nouveau groupe…" aria-label="Nouveau groupe">
+        <button type="button" class="btn-sm btn-accent" data-action="settings-add-group">Ajouter le groupe</button>
+      </div>
+    </section>`;
 
 /**
  * @param {{email: string, displayName: string, theme: 'light'|'dark', space: string}} p
- *   space : balisage déjà sûr de la section « Espace »
+ *   space : balisage déjà sûr de la section « Mon groupe »
  * @returns {string}
  */
 export function screenHtml(p) {
@@ -17,20 +28,13 @@ export function screenHtml(p) {
         <input type="text" class="form-input" id="settings-display-name" maxlength="60" autocomplete="name" value="${p.displayName}" placeholder="Prénom Nom">
         <button type="button" class="btn-sm btn-accent" data-action="settings-save-name">Enregistrer le nom</button>
       </div>
-      <p class="settings-note">Visible par les autres membres de tes espaces.</p>
+      <p class="settings-note">Visible par les autres membres de tes groupes.</p>
     </section>
     <section class="settings-card" aria-labelledby="settings-theme-title">
       <h2 class="settings-title" id="settings-theme-title">Apparence</h2>
       <div class="settings-choices" role="group" aria-label="Thème">${raw(themeBtn('light', 'Clair'))}${raw(themeBtn('dark', 'Sombre'))}</div>
     </section>
-    <section class="settings-card" aria-labelledby="settings-groups-title">
-      <h2 class="settings-title" id="settings-groups-title">Groupes</h2>
-      <div id="settings-groups"></div>
-      <div class="settings-row">
-        <input type="text" class="form-input" id="settings-group-input" maxlength="40" autocomplete="off" placeholder="Nouveau groupe…" aria-label="Nouveau groupe">
-        <button type="button" class="btn-sm btn-accent" data-action="settings-add-group">Ajouter le groupe</button>
-      </div>
-    </section>
+    ${FEATURES.groups ? raw(GROUPS_SECTION) : ''}
     ${raw(p.space)}
     <section class="settings-card" aria-labelledby="settings-sync-title">
       <h2 class="settings-title" id="settings-sync-title">Synchronisation</h2>

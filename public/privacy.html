@@ -22,18 +22,10 @@
     h1 { margin: 0 0 8px; font: 800 30px/1.15 'Bricolage Grotesque', Inter, system-ui, sans-serif; }
     h2 { margin: 28px 0 8px; font: 700 20px/1.25 'Bricolage Grotesque', Inter, system-ui, sans-serif; color: #38D1F0; }
     p, li { color: #EAF0FB; }
+    a { color: #38D1F0; }
     ul { padding-left: 22px; }
     li { margin: 4px 0; }
-    .draft {
-      margin: 16px 0 8px;
-      padding: 12px 16px;
-      border-radius: 10px;
-      background: rgba(255, 90, 54, 0.16);
-      border: 1px solid #FF5A36;
-      font-weight: 600;
-    }
     .card { padding: 4px 20px 20px; border-radius: 18px; background: #0F2044; border: 1px solid rgba(255, 255, 255, 0.08); }
-    .todo { color: #FBBF24; font-weight: 600; }
     .muted { color: #A9B8D4; font-size: 14px; }
   </style>
 </head>
@@ -41,38 +33,44 @@
   <main>
     <a class="back" href="./">← Retour à l'application</a>
     <h1>Confidentialité</h1>
-    <p class="muted">SwimCoach App, outil de suivi pour les entraîneurs du club de natation.</p>
-    <p class="draft" role="note">Version provisoire — à valider par le club.</p>
+    <p class="muted">SwimCoach App, outil de suivi des nageurs pour les entraîneurs de natation.</p>
+    <p class="muted">Dernière mise à jour : 20 novembre 2026.</p>
 
     <div class="card">
       <h2>Qui est responsable de vos données</h2>
-      <p>Le responsable de traitement est le club. Les données saisies dans l'application servent uniquement à organiser les séances et le suivi sportif des nageurs du club.</p>
+      <p>Le responsable de traitement est le créateur et éditeur de l'application, Damien Martins, entraîneur de natation, qui la développe à titre personnel. Aucun club n'intervient dans son développement ni dans la gestion des données. Les données saisies servent uniquement à organiser les séances et le suivi sportif des nageurs.</p>
+      <p>Contact pour toute demande : <a href="mailto:swimcoachapp31@gmail.com">swimcoachapp31@gmail.com</a>.</p>
 
       <h2>Quelles données sont traitées</h2>
       <ul>
-        <li><strong>Entraîneurs</strong> : adresse e-mail, mot de passe (protégé par hachage, jamais lisible, y compris par le club), nom affiché, espaces dont vous êtes membre, et les adresses e-mail des invitations à rejoindre un espace (avec l'entraîneur qui a invité).</li>
-        <li><strong>Nageurs</strong> : prénom, nom, date de naissance, groupe, saisons de présence au club, et, si l'entraîneur les renseigne, adresse e-mail, téléphone et photo.</li>
-        <li><strong>Suivi sportif</strong> : séances (texte, kilomètres, photo éventuelle), présences, performances et temps de course, planning de la saison. Les temps de course proviennent des résultats publics de liveffn, récupérés côté serveur par la fonction Supabase du club lorsqu'un entraîneur les importe.</li>
+        <li><strong>Entraîneurs</strong> : adresse e-mail, mot de passe (protégé par hachage, jamais lisible, y compris par l'éditeur), nom affiché, groupes dont vous êtes membre, et les adresses e-mail des invitations à rejoindre un groupe (avec l'entraîneur qui a invité).</li>
+        <li><strong>Nageurs</strong> : prénom, nom, date de naissance, saisons de présence, et, si l'entraîneur les renseigne, adresse e-mail, téléphone et photo.</li>
+        <li><strong>Suivi sportif</strong> : séances (texte, kilomètres, photo éventuelle), présences, performances et temps de course, planning de la saison. Les temps de course proviennent des résultats publics publiés sur liveffn (Fédération française de natation). L'application les récupère côté serveur lorsqu'un entraîneur les importe.</li>
       </ul>
-      <p><strong>Une partie des nageurs sont des mineurs.</strong> Leurs données ne sont accessibles qu'aux entraîneurs ayant activé leur compte avec le code du club et membres de l'espace concerné. Elles ne sont ni vendues, ni utilisées pour de la publicité. Les seuls sous-traitants sont :</p>
-      <ul>
-        <li>Supabase, pour l'hébergement dans l'Union européenne ;</li>
-        <li>le prestataire d'envoi des e-mails (SMTP), une fois configuré : <span class="todo">à compléter par le club</span>.</li>
-      </ul>
+      <p><strong>Une partie des nageurs sont des mineurs.</strong> Leurs données ne sont accessibles qu'aux entraîneurs dont le compte a été activé avec le code d'accès et qui sont membres du groupe concerné. Elles ne sont ni vendues, ni utilisées pour de la publicité, ni partagées avec un club ou un tiers.</p>
 
-      <h2>Où sont-elles hébergées</h2>
-      <p>Les données sont hébergées dans l'Union européenne (région <code>eu-west-1</code>, Irlande) chez Supabase. Une copie de travail est conservée sur l'appareil de l'entraîneur pour que l'application fonctionne sans réseau ; elle est effacée à la déconnexion.</p>
+      <h2>Sous-traitants et hébergement</h2>
+      <ul>
+        <li><strong>Supabase</strong> : base de données, comptes et photos, hébergés dans l'Union européenne (région <code>eu-west-1</code>, Irlande).</li>
+        <li><strong>Google (Gmail)</strong> : envoi des e-mails liés au compte (confirmation de l'adresse, réinitialisation du mot de passe) depuis l'adresse swimcoachapp31@gmail.com. Google peut traiter ces données hors de l'Union européenne, avec les garanties prévues par le RGPD (clauses contractuelles types, Data Privacy Framework).</li>
+        <li><strong>GitHub Pages</strong> : hébergement des fichiers de l'application (le site lui-même, sans aucune donnée de nageur). Comme tout hébergeur web, il reçoit l'adresse IP des visiteurs.</li>
+      </ul>
+      <p>Une copie de travail est conservée sur l'appareil de l'entraîneur pour que l'application fonctionne sans réseau. Elle est effacée à la déconnexion.</p>
 
       <h2>Combien de temps sont-elles conservées</h2>
-      <p>Durée de conservation : <span class="todo">à définir par le club</span>. Les données d'un espace sont supprimées avec cet espace, et un compte supprimé est supprimé de la base, hors copies de sauvegarde de l'hébergeur, effacées selon sa propre durée de rotation.</p>
+      <ul>
+        <li><strong>Compte entraîneur</strong> : tant que le compte est utilisé. Un compte sans aucune connexion pendant 3 ans est supprimé, comme s'il l'avait été depuis l'application.</li>
+        <li><strong>Nageurs</strong> : tant qu'ils sont suivis. Un nageur archivé (qui a quitté le groupe) est supprimé avec ses présences et ses performances au plus tard 3 ans après sa dernière saison.</li>
+        <li><strong>Séances, présences et planning</strong> : au plus tard 3 ans après la fin de la saison sportive concernée.</li>
+        <li><strong>Invitations non acceptées</strong> : supprimées après 1 an.</li>
+        <li><strong>E-mails liés au compte</strong> : les copies envoyées sont supprimées de la boîte d'envoi au plus tard après 1 an.</li>
+        <li><strong>Suppression d'un groupe ou d'un compte</strong> : les données sont effacées tout de suite de la base. Les copies de sauvegarde de l'hébergeur disparaissent ensuite selon sa propre rotation (quelques jours).</li>
+      </ul>
 
       <h2>Vos droits et la suppression de votre compte</h2>
-      <p>Conformément au RGPD, vous pouvez accéder à vos données, les faire rectifier, les faire effacer, vous opposer à leur traitement, en demander la limitation ou la portabilité. Un nageur, ou son représentant légal s'il est mineur, peut exercer ces droits auprès du club.</p>
-      <p>Un entraîneur peut supprimer son compte à tout moment depuis l'application : <strong>Réglages, Compte, Supprimer mon compte</strong>. Son compte est effacé ; les espaces dont il est le seul membre sont supprimés avec leurs données et leurs photos, les espaces partagés restent intacts pour les autres membres.</p>
+      <p>Conformément au RGPD, vous pouvez accéder à vos données, les faire rectifier, les faire effacer, vous opposer à leur traitement, en demander la limitation ou la portabilité. Un nageur, ou son représentant légal s'il est mineur, peut exercer ces droits en écrivant à <a href="mailto:swimcoachapp31@gmail.com">swimcoachapp31@gmail.com</a>, ou auprès de son entraîneur.</p>
+      <p>Un entraîneur peut supprimer son compte à tout moment depuis l'application : <strong>Réglages, Compte, Supprimer mon compte</strong>. Son compte est effacé. Les groupes dont il est le seul membre sont supprimés avec leurs données et leurs photos. Les groupes partagés restent intacts pour les autres membres.</p>
       <p>En cas de désaccord, vous pouvez saisir la CNIL (cnil.fr).</p>
-
-      <h2>Contact</h2>
-      <p><span class="todo">À compléter par le club</span> : adresse e-mail ou postale pour exercer vos droits.</p>
     </div>
   </main>
 </body>

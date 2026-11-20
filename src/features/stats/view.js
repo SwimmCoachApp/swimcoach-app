@@ -1,6 +1,6 @@
 /** Gabarits HTML des statistiques (écran) et de la fiche PDF « Club ». Toute valeur passe par `html` (échappée). */
 import { html, raw } from '../../core/html.js';
-import { groupName } from '../contacts/logic.js';
+import { groupLabel } from '../contacts/logic.js';
 import { swimmerIsActive } from '../../core/season.js';
 import { periodLabel } from './logic.js';
 
@@ -78,7 +78,7 @@ export function swimmerRowsHtml(stats) {
   return stats.perSwimmer.map((r) => html`<div class="stat-swimmer-row split">
       <div class="stat-swimmer-avatar">${initials(r.swimmer)}</div>
       <div class="stat-swimmer-info">
-        <div class="stat-swimmer-name"><div class="ssn-id"><span class="ssn-name">${r.swimmer.firstname} ${r.swimmer.lastname}${swimmerIsActive(r.swimmer) ? '' : raw('<span class="archived-badge" title="Archivé">📦</span>')}</span><span class="stat-swimmer-sub">${groupName(r.swimmer)}</span></div>
+        <div class="stat-swimmer-name"><div class="ssn-id"><span class="ssn-name">${r.swimmer.firstname} ${r.swimmer.lastname}${swimmerIsActive(r.swimmer) ? '' : raw('<span class="archived-badge" title="Archivé">📦</span>')}</span><span class="stat-swimmer-sub">${groupLabel(r.swimmer)}</span></div>
           ${r.natKm > 0 ? raw(html`<span class="stat-km-pill">${fmtKm(r.natKm)} <i>km</i></span>`) : ''}
         </div>
         <div class="stat-swimmer-splits">
@@ -191,7 +191,7 @@ export function statsPdfHtml(stats, { teamName = '', swimmerSvg = '', now = new 
   ].join(';');
 
   const lines = rows.map((r, i) => html`<div class="row">
-      <div class="who"><span class="av" style="background:${AVATARS[i % 5]}">${initials(r.swimmer)}</span><div class="who-t"><span class="nm">${r.swimmer.firstname} ${r.swimmer.lastname}${swimmerIsActive(r.swimmer) ? '' : raw(' <span class="arch">📦</span>')}</span><span class="grp">${groupName(r.swimmer)}</span></div></div>
+      <div class="who"><span class="av" style="background:${AVATARS[i % 5]}">${initials(r.swimmer)}</span><div class="who-t"><span class="nm">${r.swimmer.firstname} ${r.swimmer.lastname}${swimmerIsActive(r.swimmer) ? '' : raw(' <span class="arch">📦</span>')}</span><span class="grp">${groupLabel(r.swimmer)}</span></div></div>
       ${raw(cell(r.natPres, nat, r.natPct))}${raw(cell(r.muscPres, musc, r.muscPct))}${hasComp ? raw(cell(r.compPres, comp, r.compPct)) : ''}
       <span class="km">${fmtKm(r.natKm)} <small>km</small></span>
     </div>`).join('');

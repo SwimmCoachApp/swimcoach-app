@@ -2,7 +2,8 @@
 import { html, raw } from '../../core/html.js';
 import { ageOn } from '../../core/dates.js';
 import { swimmerIsActive } from '../../core/season.js';
-import { groupName } from './logic.js';
+import { groupLabel } from './logic.js';
+import { FEATURES } from '../../core/features.js';
 
 const initials = (sw) => `${(sw.firstname || '')[0] || ''}${(sw.lastname || '')[0] || ''}`.toUpperCase();
 const seasonLabel = (s) => `${s}–${String(s + 1).slice(2)}`;
@@ -24,8 +25,8 @@ export function screenHtml() {
       <button type="button" class="contacts-mode-btn" data-action="mode" data-key="archives">📦 Archivés <span data-count="archives"></span></button>
     </div>
     <div class="group-mail-bar">
-      <select class="group-mail-select" id="group-mail-select" data-action="mail-group" data-on="change" aria-label="Groupe à écrire"></select>
-      <a class="group-mail-btn" id="group-mail-link" data-action="group-mail" href="#">✉️ Mail groupe</a>
+      ${FEATURES.groups ? raw('<select class="group-mail-select" id="group-mail-select" data-action="mail-group" data-on="change" aria-label="Groupe à écrire"></select>') : ''}
+      <a class="group-mail-btn" id="group-mail-link" data-action="group-mail" href="#">✉️ ${FEATURES.groups ? 'Mail groupe' : 'Mail à tous'}</a>
     </div>
     <button type="button" class="import-btn" data-action="import-open">📊 Importer depuis Excel / CSV</button>
     <div class="contacts-list" id="contacts-list"></div>
@@ -58,7 +59,7 @@ export function listHtml(swimmers, { filter, search }) {
     const archived = !swimmerIsActive(sw);
     const name = `${sw.firstname} ${sw.lastname}`.trim();
     const age = sw.dob ? ageOn(sw.dob) : null;
-    const sub = [groupName(sw), age == null ? '' : `${age} ans`].filter(Boolean).join(' · ');
+    const sub = [groupLabel(sw), age == null ? '' : `${age} ans`].filter(Boolean).join(' · ');
     return html`<div class="contact-row-wrap" data-swimmer="${sw.id}">
       <button type="button" class="contact-row-delete-bg" data-action="ask-delete" data-id="${sw.id}" aria-label="Supprimer ${name}" tabindex="-1">🗑</button>
       <div class="contact-row${archived ? ' archived' : ''}" role="button" tabindex="0" data-action="open-contact" data-id="${sw.id}">
@@ -92,7 +93,7 @@ export function ficheHtml(sw) {
     <div class="contact-popup-header">
       <button type="button" class="contact-popup-avatar" data-action="edit-swimmer" data-id="${sw.id}" aria-label="Changer la photo">${raw(avatarHtml(sw))}</button>
       <div class="contact-popup-name">${`${sw.firstname} ${sw.lastname}`.trim()}</div>
-      <div class="contact-popup-group">${groupName(sw) || 'Sans groupe'}${archived ? ` · archivé (${seasonLabel(sw.left_season)})` : ''}</div>
+      <div class="contact-popup-group">${[FEATURES.groups ? groupLabel(sw) || 'Sans groupe' : '', archived ? `archivé (${seasonLabel(sw.left_season)})` : ''].filter(Boolean).join(' · ')}</div>
       <button type="button" class="contact-popup-close" data-action="close-modal" data-id="modal-contact" aria-label="Fermer">✕</button>
     </div>
     <div class="contact-fields">${fields.map(([icon, label, val]) => raw(html`<div class="contact-field">
@@ -153,7 +154,7 @@ export function formHtml(sw, groups) {
       <div class="form-group"><label class="form-label" for="sw-firstname">Prénom</label><input type="text" class="form-input" id="sw-firstname" placeholder="Prénom" value="${v.firstname ?? ''}"></div>
       <div class="form-group"><label class="form-label" for="sw-lastname">Nom</label><input type="text" class="form-input" id="sw-lastname" placeholder="Nom" value="${v.lastname ?? ''}"></div>
       <div class="form-group"><label class="form-label" for="sw-dob">Date de naissance</label><input type="date" class="form-input" id="sw-dob" value="${v.dob ?? ''}"></div>
-      <div class="form-group"><span class="form-label">Groupe</span><div id="sw-group-block">${raw(groupBlockHtml(groups, v.group_id ?? ''))}</div></div>
+      ${FEATURES.groups ? raw(html`<div class="form-group"><span class="form-label">Groupe</span><div id="sw-group-block">${raw(groupBlockHtml(groups, v.group_id ?? ''))}</div></div>`) : ''}
       <div class="form-group"><label class="form-label" for="sw-phone">Téléphone</label><input type="tel" class="form-input" id="sw-phone" placeholder="06 xx xx xx xx" value="${v.phone ?? ''}"></div>
       <div class="form-group"><label class="form-label" for="sw-email">Email</label><input type="email" class="form-input" id="sw-email" placeholder="nom@mail.com" value="${v.email ?? ''}"></div>
     </div>
@@ -204,7 +205,7 @@ const importHeader = html`<div class="modal-handle"></div>
 export function importChooseHtml({ errors = [], busy = false } = {}) {
   return html`${raw(importHeader)}
     <div class="modal-body">
-      <p class="import-help">Un fichier Excel (.xlsx) ou CSV avec les colonnes Nom, Prénom, Date de naissance, Email, Téléphone et Groupe. Les nageurs déjà présents ne sont pas recréés.</p>
+      <p class="import-help">Un fichier Excel (.xlsx) ou CSV avec les colonnes Nom, Prénom, Date de naissance, Email${FEATURES.groups ? ', Téléphone et Groupe' : ' et Téléphone'}. Les nageurs déjà présents ne sont pas recréés.</p>
       ${errors.map((e) => raw(html`<div class="import-error" role="alert">❗ ${e}</div>`))}
       ${busy ? raw('<div class="import-help" role="status">📄 Lecture du fichier…</div>') : ''}
     </div>
@@ -232,7 +233,7 @@ export function importPreviewHtml(plan, { selected, newGroups, warnings, busy })
         <button type="button" class="imp-check${selected.has(i) ? ' on' : ''}" data-action="import-toggle" data-i="${i}" role="checkbox" aria-checked="${selected.has(i) ? 'true' : 'false'}" aria-label="${nameOf(r)}">${selected.has(i) ? '✓' : ''}</button>
         <div class="import-row-info">
           <div class="import-row-name">${nameOf(r)}</div>
-          <div class="import-row-sub">${[r.group || 'Autre', r.dob, r.phone].filter(Boolean).join(' · ')}</div>
+          <div class="import-row-sub">${[FEATURES.groups ? r.group || 'Autre' : '', r.dob, r.phone].filter(Boolean).join(' · ')}</div>
         </div>
       </div>`))}</div>
       ${newGroups.length ? raw(html`<div class="import-note">📁 ${newGroups.length} ${plural(newGroups.length, 'groupe sera créé', 'groupes seront créés')} : ${newGroups.join(', ')}</div>`) : ''}

@@ -107,7 +107,7 @@ if (typeof window !== 'undefined') {
  */
 export function upsertLocal(table, row) {
   assertTable(table);
-  if (!ctx) throw new Error('Aucun espace ouvert');
+  if (!ctx) throw new Error('Aucun groupe ouvert');
   const full = { ...row, team_id: ctx.teamId };
   db[table].set(keyOf(table, full), full);
   saveCache();
@@ -121,7 +121,7 @@ export function upsertLocal(table, row) {
  */
 export function deleteLocal(table, key) {
   assertTable(table);
-  if (!ctx) throw new Error('Aucun espace ouvert');
+  if (!ctx) throw new Error('Aucun groupe ouvert');
   if (!db[table].delete(key)) return;
   saveCache();
   notify(table);

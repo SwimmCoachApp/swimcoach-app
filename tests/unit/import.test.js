@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { normalizeName } from '../../src/core/names.js';
+import { FEATURES } from '../../src/core/features.js';
 import { parseDob, tableToRows, parseCsv, parseImportFile, planImport, groupsToCreate, templateCsv, MAX_IMPORT_ROWS } from '../../src/features/contacts/import.js';
 
 const fixture = (name) => resolve(process.cwd(), 'tests/fixtures', name);
@@ -140,7 +141,13 @@ describe('planImport : cas limites', () => {
 });
 
 describe('groupsToCreate', () => {
-  test('groupe vide = Autre, comparaison sans accents ni casse, une seule fois', () => {
+  afterEach(() => { FEATURES.groups = false; });
+  test('groupes masqués (réglage par défaut) : aucun groupe à créer', () => {
+    expect(FEATURES.groups).toBe(false);
+    expect(groupsToCreate([{ group: 'Élite' }, { group: '' }], [])).toEqual([]);
+  });
+  test('groupes affichés : groupe vide = Autre, comparaison sans accents ni casse, une seule fois', () => {
+    FEATURES.groups = true;
     const rows = [{ group: '' }, { group: 'autre' }, { group: 'Élite' }, { group: 'elite' }, { group: 'Benjamins' }];
     expect(groupsToCreate(rows, [{ name: 'benjamins' }])).toEqual(['Autre', 'Élite']);
     expect(groupsToCreate(rows, [{ name: 'Autre' }, { name: 'ELITE' }, { name: 'Benjamins' }])).toEqual([]);

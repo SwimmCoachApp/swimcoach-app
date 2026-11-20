@@ -19,7 +19,7 @@ onCoachChange((c) => {
 function teamError(error) {
   const m = error?.message || '';
   if (/not_allowed/.test(m)) return "Tu n'as pas accès à cette action";
-  if (/invalid_name/.test(m)) return "Le nom de l'espace doit faire entre 1 et 60 caractères";
+  if (/invalid_name/.test(m)) return "Le nom du groupe doit faire entre 1 et 60 caractères";
   return 'Une erreur est survenue, réessaie';
 }
 
@@ -91,8 +91,8 @@ export function setCurrentTeam(id) {
 export async function createTeam(name) {
   const coach = getCoach();
   const clean = name.trim();
-  if (!coach) throw new Error('Connecte-toi pour créer un espace');
-  if (!clean) throw new Error("Donne un nom à l'espace");
+  if (!coach) throw new Error('Connecte-toi pour créer un groupe');
+  if (!clean) throw new Error("Donne un nom au groupe");
   const { data, error } = await supabase.rpc('create_team', { name: clean });
   if (error) throw new Error(teamError(error));
   const teams = [...(cache?.coachId === coach.id ? cache.teams : []), { id: data, name: clean }];

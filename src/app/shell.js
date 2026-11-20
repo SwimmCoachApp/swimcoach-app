@@ -51,7 +51,7 @@ export function setCurrentTeamName(id, name) {
 }
 
 /** Balisage de l'attente d'un espace, avec la déconnexion toujours possible (liste des espaces bloquée). */
-export const LOADING_HTML = '<div class="screen loading-screen" data-loading role="status"><p>Chargement de l\'espace…</p><button type="button" class="btn-link" data-action="logout">Se déconnecter</button></div>';
+export const LOADING_HTML = '<div class="screen loading-screen" data-loading role="status"><p>Chargement du groupe…</p><button type="button" class="btn-link" data-action="logout">Se déconnecter</button></div>';
 
 /**
  * Écran d'attente du démarrage (avant la coque) : la liste des espaces peut ne jamais répondre,
@@ -81,6 +81,9 @@ export function closeModal(id) {
   el.classList.remove('open');
   requestAnimationFrame(() => requestAnimationFrame(() => void el.offsetHeight));
 }
+
+/** Écran à rouvrir après un changement d'espace (switchTeam), consommé par le prochain startApp. */
+let resumeScreen = null;
 
 /**
  * Affiche un écran enregistré.
@@ -136,13 +139,15 @@ function teamListHtml(teams, currentId) {
  * @param {() => void} leave appelé après la déconnexion ou un changement d'espace (reprend le routage)
  */
 export function startApp(root, coach, team, leave) {
-  ctx = { root, coach, team, leave, current: 'calendar', loading: false, teams: null }; // loading : changement d'espace en cours
+  const first = resumeScreen && screens.has(resumeScreen) ? resumeScreen : 'calendar';
+  resumeScreen = null;
+  ctx = { root, coach, team, leave, current: first, loading: false, teams: null }; // loading : changement d'espace en cours
   const nav = ORDER.filter((n) => screens.has(n));
-  root.innerHTML = html`<div class="shell" data-active="calendar">
+  root.innerHTML = html`<div class="shell" data-active="${first}">
     <header class="top-bar">
       <div class="top-bar-brand"><div class="top-bar-text"><div class="top-bar-title">SwimCoach <span>App</span></div></div></div>
       <div class="top-bar-actions">
-        <button type="button" class="top-bar-team" data-action="open-teams" aria-label="Changer d'espace"><span data-team-name>${team.name}</span><span aria-hidden="true">▾</span></button>
+        <button type="button" class="top-bar-team" data-action="open-teams" aria-label="Changer de groupe"><span data-team-name>${team.name}</span><span aria-hidden="true">▾</span></button>
         <button type="button" class="icon-btn" data-action="toggle-theme" aria-label="Changer de thème">${currentTheme() === 'dark' ? '🌙' : '☀️'}</button>
         <button type="button" class="icon-btn" data-action="nav" data-key="settings" aria-label="Réglages">${raw(GEAR)}</button>
       </div>
@@ -150,9 +155,9 @@ export function startApp(root, coach, team, leave) {
     </header>
     <div id="views"></div>
     <nav class="bottom-nav" aria-label="Navigation">${raw(nav.map(navItem).join(""))}</nav>
-    ${raw(sheet('modal-teams', 'Mes espaces', '<div id="teams-body"></div>'))}
+    ${raw(sheet('modal-teams', 'Mes groupes', '<div id="teams-body"></div>'))}
   </div>`;
-  showScreen('calendar');
+  showScreen(first);
 }
 
 on('nav', (el) => showScreen(el.dataset.key)); // sans effet pendant le chargement (voir showScreen)
@@ -163,6 +168,7 @@ on('toggle-theme', (el) => {
   el.textContent = currentTheme() === 'dark' ? '🌙' : '☀️';
 });
 on('logout', () => {
+  resumeScreen = null;
   if (ctx) leaveSession(ctx.leave);
   else if (bootLeave) leaveSession(bootLeave);
 });
@@ -183,6 +189,7 @@ on('open-teams', async () => {
 export function switchTeam(id, name) {
   if (!ctx || id === ctx.team.id) return;
   ctx.loading = true; // la navigation est bloquée jusqu'au prochain startApp
+  resumeScreen = ctx.current; // le prochain startApp rouvre le même écran dans le nouvel espace
   ctx.team = { id, name }; // cible en cours : coche de la liste et en-tête restent cohérents
   suspendTeam(); // coupe le temps réel et vide le store de l'ancien espace tout de suite
   setCurrentTeam(id);
@@ -195,6 +202,7 @@ export function switchTeam(id, name) {
 /** L'espace ouvert a déjà été fermé et oublié (quitté ou supprimé) : attente, puis reprise du routage. */
 export function leaveClosedTeam() {
   if (!ctx) return;
+  resumeScreen = null; // espace perdu : retour au calendrier
   ctx.loading = true;
   ctx.teams = null;
   ctx.root.querySelector('#views').innerHTML = LOADING_HTML;

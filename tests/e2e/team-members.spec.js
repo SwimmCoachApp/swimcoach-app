@@ -44,7 +44,7 @@ test('(e) ajout par e-mail, invitation, retrait d’un membre par un autre, dern
 
   // C n'est encore membre d'aucun espace
   await login(pageC, 'c@toac.fr');
-  await expect(pageC.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
+  await expect(pageC.getByRole('heading', { name: 'Crée ton groupe' })).toBeVisible();
 
   await login(pageA, 'a@toac.fr');
   await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
@@ -92,15 +92,15 @@ test('(e) ajout par e-mail, invitation, retrait d’un membre par un autre, dern
 
   expect((await teamKeys(pageA, A, TA)).length).toBeGreaterThan(0);
   await nudge(pageA);
-  await expect(pageA.getByText("Tu n'as plus accès à l'espace « Pôle <i>Formation</i> »")).toBeVisible();
-  await expect(pageA.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
+  await expect(pageA.getByText("Tu n'as plus accès au groupe « Pôle <i>Formation</i> »")).toBeVisible();
+  await expect(pageA.getByRole('heading', { name: 'Crée ton groupe' })).toBeVisible();
   expect(await teamKeys(pageA, A, TA)).toEqual([]);
 
   // C, dernier membre, ne peut pas quitter
   const self = pageC.locator('.member-row', { hasText: 'c@toac.fr' });
-  await self.getByRole('button', { name: "Quitter l'espace" }).click();
+  await self.getByRole('button', { name: "Quitter le groupe" }).click();
   await pageC.getByRole('dialog').getByRole('button', { name: 'Quitter' }).click();
-  await expect(pageC.locator('[data-members-msg]')).toHaveText("Tu es le dernier membre : supprime l'espace si tu n'en as plus besoin");
+  await expect(pageC.locator('[data-members-msg]')).toHaveText("Tu es le dernier membre : supprime le groupe si tu n'en as plus besoin");
   expect(fake.state.tables.team_members).toHaveLength(1);
 
   await ctxA.close();
@@ -130,15 +130,15 @@ test('(f) retiré pendant qu’il est hors ligne avec une op en attente : rien n
   fake.state.offline = false;
   await ctxA.setOffline(false);
   await nudge(pageA);
-  await expect(pageA.getByText("Tu n'as plus accès à l'espace « Pôle <i>Formation</i> »")).toBeVisible();
-  await expect(pageA.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
+  await expect(pageA.getByText("Tu n'as plus accès au groupe « Pôle <i>Formation</i> »")).toBeVisible();
+  await expect(pageA.getByRole('heading', { name: 'Crée ton groupe' })).toBeVisible();
   expect(await teamKeys(pageA, A, TA)).toEqual([]);
   expect(fake.calls.slice(mark).filter((c) => c.path === '/rest/v1/swimmers' && c.method === 'POST')).toEqual([]);
   expect(fake.state.tables.swimmers.map((s) => s.firstname)).toEqual(['Léa']);
   await ctxA.close();
 });
 
-test('renommer l’espace, quitter un espace partagé, créer un autre espace', async ({ browser }) => {
+test('renommer l’espace, quitter un groupe partagé, créer un autre groupe', async ({ browser }) => {
   const ctxA = await browser.newContext();
   const fake = await installFakeSupabase(ctxA, seed());
   fake.addMember(TA, 'c@toac.fr');
@@ -147,31 +147,32 @@ test('renommer l’espace, quitter un espace partagé, créer un autre espace', 
   await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
   await settings(pageA);
 
-  await pageA.getByLabel("Nom de l'espace").fill('Pôle Perf');
+  await pageA.getByLabel("Nom du groupe").fill('Pôle Perf');
   await pageA.getByRole('button', { name: 'Renommer' }).click();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Pôle Perf');
   expect(fake.state.tables.teams[0].name).toBe('Pôle Perf');
 
-  await pageA.getByLabel('Nom du nouvel espace').fill('Loisirs adultes');
-  await pageA.getByRole('button', { name: "Créer l'espace" }).click();
+  await pageA.getByLabel('Nom du nouveau groupe').fill('Loisirs adultes');
+  await pageA.getByRole('button', { name: "Créer le groupe" }).click();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Loisirs adultes');
-  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  // créé depuis les Réglages : on y reste dans le nouveau groupe
+  await expect(pageA.locator('[data-screen="settings"]')).toBeVisible();
 
   // retour sur l'espace partagé, puis départ volontaire
   await pageA.locator('.top-bar-team').click();
   await pageA.getByRole('button', { name: 'Pôle Perf' }).click();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Pôle Perf');
-  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(pageA.locator('[data-screen="settings"]')).toBeVisible();
   await settings(pageA);
-  await pageA.locator('.member-row', { hasText: 'a@toac.fr' }).getByRole('button', { name: "Quitter l'espace" }).click();
-  await pageA.getByRole('dialog', { name: "Quitter l'espace « Pôle Perf » ?" }).getByRole('button', { name: 'Quitter' }).click();
+  await pageA.locator('.member-row', { hasText: 'a@toac.fr' }).getByRole('button', { name: "Quitter le groupe" }).click();
+  await pageA.getByRole('dialog', { name: "Quitter le groupe « Pôle Perf » ?" }).getByRole('button', { name: 'Quitter' }).click();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Loisirs adultes');
-  await expect(pageA.getByText("Tu as quitté l'espace « Pôle Perf »")).toBeVisible();
+  await expect(pageA.getByText("Tu as quitté le groupe « Pôle Perf »")).toBeVisible();
   expect(fake.state.tables.team_members.filter((m) => m.team_id === TA).map((m) => m.coach_id)).toEqual([fake.coachId('c@toac.fr')]);
   await ctxA.close();
 });
 
-test('renommage lent puis changement d’espace : l’en-tête garde le nom du nouvel espace', async ({ browser }) => {
+test('renommage lent puis changement d’espace : l’en-tête garde le nom du nouveau groupe', async ({ browser }) => {
   const ctxA = await browser.newContext();
   const fake = await installFakeSupabase(ctxA, seed());
   fake.addTeam({ id: '77777777-7777-4777-8777-777777777777', name: 'Zèbre' });
@@ -183,11 +184,11 @@ test('renommage lent puis changement d’espace : l’en-tête garde le nom du n
   let release;
   const gate = new Promise((r) => { release = r; });
   await pageA.route('**/rest/v1/rpc/rename_team', async (route) => { await gate; await route.fallback(); });
-  await pageA.getByLabel("Nom de l'espace").fill('Ancien renommé');
+  await pageA.getByLabel("Nom du groupe").fill('Ancien renommé');
   await pageA.getByRole('button', { name: 'Renommer' }).click();
   await pageA.locator('.top-bar-team').click();
   await pageA.getByRole('button', { name: 'Zèbre' }).click();
-  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  await expect(pageA.locator('[data-screen="settings"]')).toBeVisible();
   await expect(pageA.locator('[data-team-name]')).toHaveText('Zèbre');
   release();
   await expect.poll(() => fake.state.tables.teams.find((t) => t.id === TA).name).toBe('Ancien renommé');

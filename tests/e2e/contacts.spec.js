@@ -6,8 +6,9 @@ const G1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const G2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const PHOTO_PATH = new RegExp(`^${T1}/swimmers/[0-9a-f-]{36}\\.jpg$`);
 
-async function open(page, tables = {}) {
+async function open(page, tables = {}, features = { groups: true }) {
   const fake = await installFakeSupabase(page, {
+    features, // ce fichier couvre aussi les groupes, masqués par défaut dans l'app
     users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: true }],
     teams: [{ id: T1, name: 'TOAC Natation' }],
     members: [{ team_id: T1, email: 'coach@toac.fr' }],
@@ -232,13 +233,13 @@ test('hors ligne : la photo attend la connexion, le reste est enregistré et par
   expect(fake.state.tables.swimmers[0].photo_path).toBeNull();
 });
 
-test('création d’un espace : les groupes par défaut sont créés une seule fois', async ({ page }) => {
-  const fake = await installFakeSupabase(page, { users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: true }] });
+test('création d’un groupe : les groupes par défaut sont créés une seule fois', async ({ page }) => {
+  const fake = await installFakeSupabase(page, { features: { groups: true }, users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: true }] });
   await page.goto('/');
   await page.getByLabel('Adresse e-mail').fill('coach@toac.fr');
   await page.getByLabel('Mot de passe').fill('motdepasse-long');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await page.getByLabel("Nom de l'espace").fill('Mon club');
+  await page.getByLabel("Nom du groupe").fill('Mon club');
   await page.getByRole('button', { name: 'Créer' }).click();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
   const names = () => fake.state.tables.groups.map((g) => g.name);
@@ -255,6 +256,7 @@ test('création d’un espace : les groupes par défaut sont créés une seule f
 
 test('espace sans groupe ouvert par un invité : les groupes par défaut arrivent une fois ; avec un groupe, rien n’est créé', async ({ page }) => {
   const fake = await installFakeSupabase(page, {
+    features: { groups: true }, // ce fichier couvre aussi les groupes (masqués par défaut)
     users: [{ email: 'invite@toac.fr', password: 'motdepasse-long', activated: true }],
     teams: [{ id: T1, name: 'Chez le collègue' }],
     members: [{ team_id: T1, email: 'invite@toac.fr' }],
@@ -365,4 +367,22 @@ test('la capture de la liste et de la fiche (sombre et clair)', async ({ page })
   await page.locator('.contact-row', { hasText: 'Léa' }).click();
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'test-results/contacts-fiche-light.png' });
+});
+
+test('groupes masqués (réglage de l’app) : ni groupe, ni liste de groupes ; « Mail à tous » ; le groupe d’un nageur modifié est gardé', async ({ page }) => {
+  const id = '00000001-0000-4000-8000-000000000001';
+  const fake = await open(page, { swimmers: [{ id, team_id: T1, firstname: 'Léa', lastname: 'Roux', email: 'lea@toac.fr', group_id: G1, joined_season: 2025, left_season: null }] }, {});
+  await expect(page.locator('#group-mail-select')).toHaveCount(0);
+  await expect(page.locator('#group-mail-link')).toHaveText('✉️ Mail à tous');
+  await expect(page.locator('#group-mail-link')).toHaveAttribute('href', /^mailto:\?bcc=lea%40toac\.fr/);
+  await expect(page.locator('#contacts-list')).not.toContainText('Benjamins');
+  await page.locator('.contact-row', { hasText: 'Léa' }).click();
+  await expect(page.locator('#contact-popup')).not.toContainText('Benjamins');
+  await expect(page.locator('#contact-popup')).not.toContainText('Sans groupe');
+  await page.locator('#contact-popup').getByRole('button', { name: '✏️ Modifier' }).click();
+  await expect(page.locator('#sw-group')).toHaveCount(0);
+  await page.getByLabel('Nom', { exact: true }).fill('Roux-Martin');
+  await page.getByRole('button', { name: /Enregistrer/ }).click();
+  await expect.poll(() => fake.state.tables.swimmers.find((s) => s.id === id)?.lastname).toBe('Roux-Martin');
+  expect(fake.state.tables.swimmers.find((s) => s.id === id).group_id).toBe(G1);
 });

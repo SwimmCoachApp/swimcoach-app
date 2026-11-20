@@ -63,6 +63,13 @@ select private.set_invite_code('LE-CODE-CHOISI');
 Un nouvel appel remplace l'ancien code. La comparaison ignore la casse et les espaces
 autour. Chaque compte a 5 essais par heure.
 
+## Fonctions masquées
+
+`src/core/features.js` liste les fonctions gardées dans le code mais masquées à l'écran.
+`groups: false` : les groupes de nageurs de club4 (étiquette, « Mail groupe », colonne Groupe de l'import,
+groupes par défaut) ne s'affichent pas. L'espace d'équipe, appelé « groupe » à l'écran, fait ce tri.
+Le « Mail groupe » devient « Mail à tous ». Les tests e2e les réactivent avec `installFakeSupabase(page, { features: { groups: true } })`.
+
 ## Tests de la base (pgTAP)
 
 Fichiers dans `supabase/tests/database/` ; procédure détaillée dans `docs/db-tests.md`.

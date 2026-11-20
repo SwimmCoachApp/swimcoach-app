@@ -35,7 +35,7 @@ Nouvelle version de SwimCoach App (branche `feat/multi-coach`) :
 5. Vérifier « Confirm email » et « Secure email change » (activés), `db-tx-end=commit-allow-override` (jamais activé).
 6. Vérifier que l'origine de mise en ligne figure dans `supabase/functions/_shared/cors.js` (redéployer les fonctions sinon).
 7. Faire les contrôles manuels du README sous l'adresse Pages : vraie page liveffn, vrai e-mail de confirmation et lien de réinitialisation, fonctions Edge déployées (401 sans jeton, préflight CORS `OPTIONS`), service worker et hors ligne sur appareil.
-8. Valider la page de confidentialité (`public/privacy.html`, version provisoire) avec le club.
+8. Page de confidentialité (`public/privacy.html`) rédigée le 20/11/2026, responsable : l'éditeur.
 
 ## Risques acceptés (voir `docs/security-notes.md`)
 

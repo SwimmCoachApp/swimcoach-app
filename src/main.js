@@ -22,6 +22,7 @@ import { listMyTeams, getCurrentTeam, setCurrentTeam } from './core/teams.js';
 import { pendingCount, flushCoach } from './core/outbox.js';
 import { supabase } from './core/supabase.js';
 import { ensureDefaultGroups } from './core/default-groups.js';
+import { FEATURES } from './core/features.js';
 import { configureSync, openTeam, closeTeam } from './core/sync.js';
 import { showCredentials, showCode, showRecovery, leaveSession } from './features/auth/index.js';
 import { showCreateTeam } from './features/teams/picker.js';
@@ -43,7 +44,7 @@ let run = 0;
 // signOut envoie d'abord la file (en ligne, 3 s au plus) ; 'pending' s'il reste des écritures.
 configureSession({ getPendingCount: (coachId) => pendingCount(undefined, coachId), flushPending: (coachId) => flushCoach(supabase, coachId) });
 // Accès à l'espace ouvert perdu : on reprend le routage (autre espace ou « Crée ton espace »).
-configureSync({ toast, onTeamLost: () => route(), onSynced: ensureDefaultGroups, onTeamRenamed: (t) => setCurrentTeamName(t.id, t.name) });
+configureSync({ toast, onTeamLost: () => route(), onSynced: () => { if (FEATURES.groups) ensureDefaultGroups(); }, onTeamRenamed: (t) => setCurrentTeamName(t.id, t.name) });
 initTheme();
 registerSettingsScreen();
 registerContactsScreen();

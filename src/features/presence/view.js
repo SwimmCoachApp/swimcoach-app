@@ -2,7 +2,7 @@
 import { html, raw } from '../../core/html.js';
 import { swimmerIsActive } from '../../core/season.js';
 import { avatarHtml } from '../contacts/view.js';
-import { groupName } from '../contacts/logic.js';
+import { groupLabel } from '../contacts/logic.js';
 
 /** @returns {string} en-tête, jauge et liste vide de l'appel */
 export function rollCallHtml() {
@@ -31,7 +31,7 @@ export function presenceRowHtml(sw, checked) {
     <span class="p-check" aria-hidden="true">${checked ? '✓' : ''}</span>
     <span class="p-avatar" aria-hidden="true">${raw(avatarHtml(sw))}</span>
     <span class="p-name">${name}${swimmerIsActive(sw) ? '' : raw('<span class="archived-badge" title="Archivé">📦</span>')}</span>
-    <span class="p-group">${groupName(sw)}</span>
+    <span class="p-group">${groupLabel(sw)}</span>
   </button>`;
 }
 

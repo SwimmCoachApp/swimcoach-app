@@ -86,7 +86,7 @@ const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.r
  */
 export function enqueue(op) {
   const ctx = getContext();
-  if (!ctx) throw new Error('Aucun espace ouvert');
+  if (!ctx) throw new Error('Aucun groupe ouvert');
   if (!ON_CONFLICT[op.table]) throw new Error(`Table inconnue : ${op.table}`);
   if (op.kind !== 'upsert' && op.kind !== 'delete') throw new Error(`Opération inconnue : ${op.kind}`);
   if (op.kind === 'upsert' && !op.row) throw new Error('Upsert sans ligne');

@@ -54,7 +54,7 @@ export async function resizeImage(file, maxSide = 800, quality = 0.82) {
  */
 export function photoPath(kind, id) {
   const ctx = getContext();
-  if (!ctx) throw new Error('Aucun espace ouvert');
+  if (!ctx) throw new Error('Aucun groupe ouvert');
   return `${ctx.teamId.toLowerCase()}/${kind}/${String(id).toLowerCase()}.jpg`;
 }
 
