@@ -68,12 +68,14 @@ const field = (name, label, type, extra = '') =>
  * Écran de connexion ou d'inscription.
  * @param {HTMLElement} root
  * @param {'login'|'signup'} mode
- * @param {{submit: (form: HTMLFormElement) => void, switchMode: () => void, forgot: (form: HTMLFormElement) => void}} h
+ * @param {{submit: (form: HTMLFormElement) => void, switchMode: () => void, forgot: (form: HTMLFormElement) => void, back?: () => void}} h
+ *   back : retour à la présentation de l'app (lien en haut du formulaire)
  * @param {boolean} [waiting] déconnexion forcée en attente de rechargement : formulaire désactivé
  */
 export function renderCredentials(root, mode, h, waiting = false) {
   const login = mode === 'login';
-  const inner = `<form novalidate>
+  const inner = `${h.back ? '<button class="auth-back" type="button" data-action="back">‹ Présentation de l’app</button>' : ''}
+    <form novalidate>
       ${field('email', 'Adresse e-mail', 'email', 'autocomplete="email" autocapitalize="none" inputmode="email"')}
       ${field('password', 'Mot de passe', 'password', `autocomplete="${login ? 'current-password' : 'new-password'}"`)}
       ${login ? '' : '<p class="auth-hint">10 caractères minimum.</p>'}
@@ -86,7 +88,7 @@ export function renderCredentials(root, mode, h, waiting = false) {
     ${PRIVACY_LINK}`;
   const main = mount(root, 'auth', inner, {
     submit: h.submit,
-    actions: { switch: h.switchMode, forgot: () => h.forgot(main.querySelector('form')) },
+    actions: { switch: h.switchMode, forgot: () => h.forgot(main.querySelector('form')), ...(h.back ? { back: h.back } : {}) },
   });
   if (waiting) {
     for (const el of main.querySelectorAll('input, button')) el.disabled = true;

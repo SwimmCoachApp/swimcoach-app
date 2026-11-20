@@ -24,7 +24,7 @@ import { supabase } from './core/supabase.js';
 import { ensureDefaultGroups } from './core/default-groups.js';
 import { FEATURES } from './core/features.js';
 import { configureSync, openTeam, closeTeam } from './core/sync.js';
-import { showCredentials, showCode, showRecovery, leaveSession } from './features/auth/index.js';
+import { showStart, showCode, showRecovery, leaveSession } from './features/auth/index.js';
 import { showCreateTeam } from './features/teams/picker.js';
 import { startApp, showBootLoading, setCurrentTeamName } from './app/shell.js';
 import { registerSettingsScreen } from './features/settings/index.js';
@@ -61,7 +61,7 @@ async function route() {
   const coach = getCoach();
   if (isRecovering() || !coach?.activated) closeTeam();
   if (isRecovering()) return showRecovery(root, route);
-  if (!coach) return showCredentials(root, 'login', route);
+  if (!coach) return showStart(root, route);
   if (!coach.activated) return showCode(root, coach, route, route);
   // La liste des espaces peut tarder (ou ne jamais répondre) : écran d'attente avec la déconnexion.
   if (!root.querySelector('.shell')) showBootLoading(root, route);
