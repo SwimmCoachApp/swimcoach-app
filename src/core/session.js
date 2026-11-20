@@ -158,7 +158,10 @@ function authMessage(error) {
   if (code === 'invalid_credentials') return 'E-mail ou mot de passe incorrect';
   if (code === 'email_not_confirmed') return 'Confirme ton adresse e-mail avant de te connecter';
   if (code === 'weak_password') return MSG_PASSWORD_SHORT;
-  if (code === 'over_request_rate_limit' || code === 'over_email_send_rate_limit') return 'Trop de tentatives, réessaie dans quelques minutes';
+  if (code === 'over_email_send_rate_limit') {
+    return 'Un e-mail de confirmation vient déjà de partir : vérifie ta boîte mail (et les spams). Tu pourras en redemander un dans une minute.';
+  }
+  if (code === 'over_request_rate_limit') return 'Trop de tentatives, réessaie dans quelques minutes';
   if (error?.status === 0 || /fetch|network/i.test(error?.message || '')) return 'Connexion impossible, vérifie ta connexion internet';
   return 'Une erreur est survenue, réessaie';
 }
@@ -182,7 +185,13 @@ export async function signIn(email, password) {
  */
 export async function signUp(email, password) {
   if (password.length < MIN_PASSWORD_LENGTH) throw new Error(MSG_PASSWORD_SHORT);
-  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+  // Le lien de l'e-mail revient vers l'app, quelle que soit l'« URL du site » réglée dans Supabase
+  // (l'adresse doit figurer dans les Redirect URLs autorisées).
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { emailRedirectTo: location.origin + location.pathname },
+  });
   if (error) throw new Error(authMessage(error));
   if (!data.session) return 'confirm';
   await loadCoach(data.session.user);

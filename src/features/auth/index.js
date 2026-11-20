@@ -6,7 +6,7 @@
 import { signIn, signUp, redeemCode, sendPasswordReset, updatePassword, signOut, isReloadPending } from '../../core/session.js';
 import { pendingCount } from '../../core/outbox.js';
 import { askConfirm } from '../../app/dialog.js';
-import { renderCredentials, renderCode, renderRecovery, setMessage, setBusy, fieldValue } from './view.js';
+import { renderCredentials, renderCode, renderRecovery, renderSignupSent, setMessage, setBusy, fieldValue } from './view.js';
 
 /** Exécute une action asynchrone en bloquant le bouton ; l'erreur s'affiche sous le formulaire. */
 async function guarded(root, action) {
@@ -35,8 +35,9 @@ export function showCredentials(root, mode = 'login', done = () => {}) {
         if (!email.trim()) return setMessage(root, 'Saisis ton adresse e-mail');
         if (mode === 'signup') {
           const result = await signUp(email, password);
-          if (result === 'confirm') setMessage(root, 'Vérifie ta boîte mail pour confirmer ton adresse', 'info');
-          else done();
+          if (result === 'confirm') {
+            renderSignupSent(root, email.trim(), { login: () => showCredentials(root, 'login', done) });
+          } else done();
         } else {
           await signIn(email, password);
           done();

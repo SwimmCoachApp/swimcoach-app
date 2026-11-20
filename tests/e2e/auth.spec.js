@@ -28,7 +28,16 @@ test('(a bis) une inscription valide demande de confirmer l’adresse', async ({
   await page.getByLabel('Mot de passe').fill(PW);
   await page.getByRole('button', { name: 'Créer un compte' }).click();
   await expect(page.getByText('Vérifie ta boîte mail pour confirmer ton adresse')).toBeVisible();
-  expect(fake.callsTo('/auth/v1/signup')).toHaveLength(1);
+  const calls = fake.callsTo('/auth/v1/signup');
+  expect(calls).toHaveLength(1);
+  // Le lien de confirmation doit revenir vers l'app, pas vers l'« URL du site » par défaut.
+  const redirect = new URLSearchParams(calls[0].search).get('redirect_to');
+  expect(redirect).toBe(new URL('/', page.url()).href);
+  // Le formulaire disparaît : impossible de renvoyer l'inscription par erreur.
+  await expect(page.getByLabel('Mot de passe')).toHaveCount(0);
+  await expect(page.getByText('nouveau@toac.fr')).toBeVisible();
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.getByLabel('Mot de passe')).toBeVisible();
 });
 
 test('(b) compte non activé : code du club, puis création de l’espace, puis calendrier', async ({ page }) => {

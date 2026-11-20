@@ -95,6 +95,24 @@ export function renderCredentials(root, mode, h, waiting = false) {
 }
 
 /**
+ * Écran affiché après une inscription réussie : le formulaire disparaît pour qu'on ne le renvoie
+ * pas par erreur (Supabase n'accepte qu'un e-mail de confirmation par minute).
+ * @param {HTMLElement} root
+ * @param {string} email
+ * @param {{ login: () => void }} h
+ */
+export function renderSignupSent(root, email, h) {
+  const inner = `<p>Un e-mail vient d'être envoyé à <strong>${esc(email)}</strong>. Clique sur le lien qu'il contient,
+      puis reviens te connecter. Pense à regarder dans les spams.</p>
+    <div class="auth-links">
+      <button class="btn btn-primary" type="button" data-action="login">Se connecter</button>
+    </div>
+    ${PRIVACY_LINK}`;
+  mount(root, 'auth', inner, { actions: { login: h.login } });
+  setMessage(root, 'Vérifie ta boîte mail pour confirmer ton adresse', 'info');
+}
+
+/**
  * Écran « Code du club ».
  * @param {HTMLElement} root
  * @param {string} email
