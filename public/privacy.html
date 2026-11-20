@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#071327">
+  <meta name="robots" content="noindex">
+  <title>Confidentialité — SwimCoach App</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 16px 48px;
+      font: 16px/1.55 Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #071327;
+      color: #EAF0FB;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    .back { display: inline-block; margin-bottom: 16px; color: #38D1F0; font-weight: 600; text-decoration: none; }
+    .back:hover, .back:focus-visible { text-decoration: underline; }
+    h1 { margin: 0 0 8px; font: 800 30px/1.15 'Bricolage Grotesque', Inter, system-ui, sans-serif; }
+    h2 { margin: 28px 0 8px; font: 700 20px/1.25 'Bricolage Grotesque', Inter, system-ui, sans-serif; color: #38D1F0; }
+    p, li { color: #EAF0FB; }
+    ul { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .draft {
+      margin: 16px 0 8px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(255, 90, 54, 0.16);
+      border: 1px solid #FF5A36;
+      font-weight: 600;
+    }
+    .card { padding: 4px 20px 20px; border-radius: 18px; background: #0F2044; border: 1px solid rgba(255, 255, 255, 0.08); }
+    .todo { color: #FBBF24; font-weight: 600; }
+    .muted { color: #A9B8D4; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="./">← Retour à l'application</a>
+    <h1>Confidentialité</h1>
+    <p class="muted">SwimCoach App, outil de suivi pour les entraîneurs du club de natation.</p>
+    <p class="draft" role="note">Version provisoire — à valider par le club.</p>
+
+    <div class="card">
+      <h2>Qui est responsable de vos données</h2>
+      <p>Le responsable de traitement est le club. Les données saisies dans l'application servent uniquement à organiser les séances et le suivi sportif des nageurs du club.</p>
+
+      <h2>Quelles données sont traitées</h2>
+      <ul>
+        <li><strong>Entraîneurs</strong> : adresse e-mail, mot de passe (conservé sous forme chiffrée, jamais lisible), nom affiché, espaces dont vous êtes membre.</li>
+        <li><strong>Nageurs</strong> : prénom, nom, date de naissance, groupe, saisons de présence au club, et, si l'entraîneur les renseigne, adresse e-mail, téléphone et photo.</li>
+        <li><strong>Suivi sportif</strong> : séances (texte, kilomètres, photo éventuelle), présences, performances et temps de course, planning de la saison.</li>
+      </ul>
+      <p><strong>Une partie des nageurs sont des mineurs.</strong> Leurs données ne sont accessibles qu'aux entraîneurs ayant activé leur compte avec le code du club et membres de l'espace concerné. Elles ne sont ni vendues, ni utilisées pour de la publicité, ni partagées avec des tiers à d'autres fins.</p>
+
+      <h2>Où sont-elles hébergées</h2>
+      <p>Les données sont hébergées dans l'Union européenne (région <code>eu-west-1</code>, Irlande) chez Supabase. Une copie de travail est conservée sur l'appareil de l'entraîneur pour que l'application fonctionne sans réseau ; elle est effacée à la déconnexion.</p>
+
+      <h2>Combien de temps sont-elles conservées</h2>
+      <p>Durée de conservation : <span class="todo">à définir par le club</span>. Les données d'un espace sont supprimées avec cet espace, et un compte supprimé disparaît immédiatement.</p>
+
+      <h2>Vos droits et la suppression de votre compte</h2>
+      <p>Conformément au RGPD, vous pouvez accéder à vos données, les faire rectifier, les faire effacer, vous opposer à leur traitement, en demander la limitation ou la portabilité. Un nageur, ou son représentant légal s'il est mineur, peut exercer ces droits auprès du club.</p>
+      <p>Un entraîneur peut supprimer son compte à tout moment depuis l'application : <strong>Réglages, Compte, Supprimer mon compte</strong>. Son compte est effacé ; les espaces dont il est le seul membre sont supprimés avec leurs données et leurs photos, les espaces partagés restent intacts pour les autres membres.</p>
+      <p>En cas de désaccord, vous pouvez saisir la CNIL (cnil.fr).</p>
+
+      <h2>Contact</h2>
+      <p><span class="todo">À compléter par le club</span> : adresse e-mail ou postale pour exercer vos droits.</p>
+    </div>
+  </main>
+</body>
+</html>

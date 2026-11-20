@@ -3,7 +3,7 @@
  * Chaque écran appelle `done()` quand l'état de la session a changé et que l'application
  * doit reprendre son routage.
  */
-import { signIn, signUp, redeemCode, sendPasswordReset, updatePassword, signOut } from '../../core/session.js';
+import { signIn, signUp, redeemCode, sendPasswordReset, updatePassword, signOut, isReloadPending } from '../../core/session.js';
 import { pendingCount } from '../../core/outbox.js';
 import { askConfirm } from '../../app/dialog.js';
 import { renderCredentials, renderCode, renderRecovery, setMessage, setBusy, fieldValue } from './view.js';
@@ -49,7 +49,7 @@ export function showCredentials(root, mode = 'login', done = () => {}) {
         await sendPasswordReset(email);
         setMessage(root, 'Si ce compte existe, un e-mail de réinitialisation vient de partir', 'info');
       }),
-  });
+  }, isReloadPending());
 }
 
 /**

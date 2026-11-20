@@ -296,3 +296,9 @@ test('fenêtre de confirmation : le focus va sur « Annuler » et reste dans la 
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 });
+
+test('les Réglages proposent le lien « Confidentialité »', async ({ page }) => {
+  await open(page);
+  await settings(page);
+  await expect(page.getByRole('link', { name: 'Confidentialité' })).toHaveAttribute('href', './privacy.html');
+});

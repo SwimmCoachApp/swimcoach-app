@@ -72,3 +72,5 @@
   .auth { --text: #e8eef5; --bg: #0f1722; --card: #1a2433; --muted: #9fb0c3; --border: #34445a; --blue: #6aa6ff; }
   .auth .btn-primary { color: #0f1722; }
 }
+.auth-privacy { margin: 16px 0 0; text-align: center; font-size: 14px; }
+.auth-privacy a { color: inherit; }

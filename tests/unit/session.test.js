@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { authStorageAdapter } from '../../src/core/storage.js';
+import { authStorageAdapter, blockAuthWrites } from '../../src/core/storage.js';
 
 const auth = {
   signOut: vi.fn(async () => ({ error: null })),
@@ -13,7 +13,7 @@ const coachRow = { data: { id: 'x', activated_at: '2026-01-01' }, error: null };
 const from = () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => coachRow }) }) });
 vi.mock('../../src/core/supabase.js', () => ({ supabase: { auth, rpc: (...a) => rpc(...a), from: (...a) => from(...a) } }));
 
-const { signUp, signIn, signOut, redeemCode, configureSession } = await import('../../src/core/session.js');
+const { signUp, signIn, signOut, redeemCode, configureSession, isReloadPending, FLUSH_WAIT_MS } = await import('../../src/core/session.js');
 
 beforeEach(() => {
   localStorage.clear();
@@ -85,4 +85,42 @@ test("passage d'un entraîneur à un autre : les données de l'ancien sont effac
   expect(localStorage.getItem('swimcoach2_A_T1_outbox')).toBeNull();
   expect(localStorage.getItem('swimcoach2_B_activated')).toBe('true');
   expect(localStorage.getItem('swimcoach2_auth')).toBe('S');
+});
+
+describe('déconnexion dont l’attente est dépassée : pas de réécriture de session', () => {
+  const hang = () => new Promise(() => {});
+
+  afterEach(() => {
+    vi.useRealTimers();
+    blockAuthWrites(false);
+    configureSession({ reloadPage: () => {} });
+  });
+
+  // En premier : l'état « rechargement en attente » dure jusqu'au rechargement de la page, donc ici jusqu'à la fin du fichier.
+  test("une déconnexion normale n'empêche pas de se reconnecter ensuite", async () => {
+    await signOut({ force: true });
+    expect(isReloadPending()).toBe(false);
+    authStorageAdapter.setItem('swimcoach2_auth', 'S');
+    expect(localStorage.getItem('swimcoach2_auth')).toBe('S');
+  });
+
+  test("l'adaptateur refuse d'écrire la session pendant et après une déconnexion non terminée, jusqu'au rechargement", async () => {
+    vi.useFakeTimers();
+    const reload = vi.fn();
+    configureSession({ reloadPage: reload });
+    auth.signInWithPassword.mockResolvedValueOnce({ data: { user: { id: 'A', email: 'a@b.fr' } }, error: null });
+    await signIn('a@b.fr', 'motdepasse-long');
+    authStorageAdapter.setItem('swimcoach2_auth', 'avant');
+    auth.signOut.mockImplementationOnce(hang); // renouvellement de jeton qui n'en finit pas
+    const out = signOut({ force: true });
+    await vi.advanceTimersByTimeAsync(FLUSH_WAIT_MS);
+    expect(await out).toBe('done');
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('swimcoach2_auth')).toBeNull();
+    authStorageAdapter.setItem('swimcoach2_auth', 'tardive'); // le renouvellement tardif aboutit
+    expect(localStorage.getItem('swimcoach2_auth')).toBeNull();
+    authStorageAdapter.setItem('swimcoach2_auth-code-verifier', 'x');
+    expect(localStorage.getItem('swimcoach2_auth-code-verifier')).toBeNull();
+    expect(isReloadPending()).toBe(true);
+  });
 });

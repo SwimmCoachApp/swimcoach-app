@@ -4,6 +4,8 @@
  */
 import { esc } from '../../core/html.js';
 
+/** Page publique de confidentialité (servie telle quelle depuis public/). */
+const PRIVACY_LINK = '<p class="auth-privacy"><a class="btn-link" href="./privacy.html">Confidentialité</a></p>';
 const LOGO = '<div class="auth-logo" aria-hidden="true">SwimCoach</div>';
 
 /**
@@ -67,8 +69,9 @@ const field = (name, label, type, extra = '') =>
  * @param {HTMLElement} root
  * @param {'login'|'signup'} mode
  * @param {{submit: (form: HTMLFormElement) => void, switchMode: () => void, forgot: (form: HTMLFormElement) => void}} h
+ * @param {boolean} [waiting] déconnexion forcée en attente de rechargement : formulaire désactivé
  */
-export function renderCredentials(root, mode, h) {
+export function renderCredentials(root, mode, h, waiting = false) {
   const login = mode === 'login';
   const inner = `<form novalidate>
       ${field('email', 'Adresse e-mail', 'email', 'autocomplete="email" autocapitalize="none" inputmode="email"')}
@@ -79,11 +82,16 @@ export function renderCredentials(root, mode, h) {
     <div class="auth-links">
       <button class="btn-link" type="button" data-action="switch">${login ? 'Créer un compte' : 'Se connecter'}</button>
       ${login ? '<button class="btn-link" type="button" data-action="forgot">Mot de passe oublié ?</button>' : ''}
-    </div>`;
+    </div>
+    ${PRIVACY_LINK}`;
   const main = mount(root, 'auth', inner, {
     submit: h.submit,
     actions: { switch: h.switchMode, forgot: () => h.forgot(main.querySelector('form')) },
   });
+  if (waiting) {
+    for (const el of main.querySelectorAll('input, button')) el.disabled = true;
+    setMessage(root, 'Reconnexion au retour du réseau', 'info');
+  }
 }
 
 /**

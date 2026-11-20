@@ -22,7 +22,16 @@ export default defineConfig({
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,png,svg,woff2}'], navigateFallback: 'index.html' },
+      workbox: {
+        // Précache des seuls fichiers de l'application (build). Aucune règle de cache à l'exécution :
+        // les réponses de Supabase (/rest/v1/, /auth/v1/, /storage/v1/, /functions/v1/) ne sont jamais
+        // mises en cache par le service worker ; les données hors ligne viennent du stockage local.
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        globIgnores: ['splash.png', 'icons/icon-1024.png'], // sources des stores, inutiles hors ligne
+        runtimeCaching: [],
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/privacy\.html$/], // page statique précachée, pas l'écran de l'app
+      },
     }),
   ],
 });

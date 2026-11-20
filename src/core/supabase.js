@@ -14,4 +14,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
+  // Pas de nouvelles tentatives automatiques des lectures : hors ligne elles retarderaient le
+  // démarrage de plusieurs secondes (la file d'envoi et la synchro réessaient déjà d'elles-mêmes).
+  db: { retry: false },
 });

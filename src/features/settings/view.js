@@ -40,6 +40,7 @@ export function screenHtml(p) {
       <h2 class="settings-title" id="settings-account-title">Compte</h2>
       <button type="button" class="btn-full btn-accent" data-action="logout">Se déconnecter</button>
       <button type="button" class="btn-full btn-danger-ghost settings-gap" data-action="settings-delete-account">Supprimer mon compte</button>
+      <p class="settings-note settings-gap"><a class="btn-link" href="./privacy.html">Confidentialité</a></p>
     </section>`;
 }
 

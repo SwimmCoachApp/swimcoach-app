@@ -6,7 +6,7 @@
  * d'activation change (pas à chaque renouvellement de jeton).
  */
 import { supabase } from './supabase.js';
-import { coachStore, clearAllCoachData, appStore } from './storage.js';
+import { coachStore, clearAllCoachData, appStore, blockAuthWrites } from './storage.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 export const MSG_PASSWORD_SHORT = 'Le mot de passe doit faire au moins 10 caractères';
@@ -21,6 +21,8 @@ let getPendingCount = () => 0;
  * rechargement de la page, aucun événement de session à son nom n'est accepté et sa session réécrite est effacée.
  */
 let signedOutId = null;
+/** Vrai quand une déconnexion forcée attend le rechargement de la page (jusque-là, plus de connexion possible). */
+let reloadPending = false;
 /**
  * Recharge la page. Hors ligne sans service worker, le rechargement échouerait (page d'erreur du
  * navigateur) : il attend alors le retour du réseau ; d'ici là, signedOutId écarte la session tardive.
@@ -58,6 +60,11 @@ export function getCoach() {
 export function onCoachChange(cb) {
   coachListeners.add(cb);
   return () => coachListeners.delete(cb);
+}
+
+/** @returns {boolean} true tant que la page doit se recharger (déconnexion forcée, éventuellement au retour du réseau) */
+export function isReloadPending() {
+  return reloadPending;
 }
 
 /** @returns {boolean} true quand l'entraîneur arrive par un lien de réinitialisation de mot de passe */
@@ -228,6 +235,8 @@ export async function signOut({ force = false } = {}) {
     if (getPendingCount(coach?.id) > 0) return 'pending';
   }
   const leaving = coach?.id ?? null;
+  // Aucun renouvellement de jeton ne doit réécrire la session pendant qu'on la ferme.
+  blockAuthWrites(true);
   // Jeton expiré sans réseau fiable : supabase-js tente de le renouveler (en boucle, jusqu'à 30 s, verrou
   // pris) avant de déconnecter. On n'attend pas plus de FLUSH_WAIT_MS ; si l'attente est dépassée, ce
   // renouvellement vit encore et pourrait réécrire la session (même par-dessus celle d'un autre
@@ -238,7 +247,10 @@ export async function signOut({ force = false } = {}) {
     new Promise((resolve) => { timer = setTimeout(() => resolve(true), FLUSH_WAIT_MS); }),
   ]);
   clearTimeout(timer);
-  if (timedOut) signedOutId = leaving;
+  if (timedOut) {
+    signedOutId = leaving;
+    reloadPending = true; // avant setCoach(null) : l'écran de connexion doit déjà le savoir
+  } else blockAuthWrites(false);
   recovering = false;
   clearAllCoachData();
   setCoach(null);

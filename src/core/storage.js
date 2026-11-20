@@ -146,6 +146,18 @@ export function clearAllCoachData() {
   }
 }
 
+/** Vrai pendant une déconnexion et, si elle n'a pas abouti à temps, jusqu'au rechargement de la page. */
+let authWritesBlocked = false;
+
+/**
+ * Interdit (ou autorise de nouveau) l'écriture de la session d'authentification par supabase-js.
+ * Posé par la déconnexion : un renouvellement de jeton tardif ne doit pas réécrire la session.
+ * @param {boolean} blocked
+ */
+export function blockAuthWrites(blocked) {
+  authWritesBlocked = blocked;
+}
+
 /**
  * Adaptateur de stockage pour supabase-js (session d'authentification).
  * Limité aux clés `swimcoach2_` : toute autre clé est ignorée (lecture : null).
@@ -155,6 +167,7 @@ export const authStorageAdapter = {
   getItem: (key) => (key.startsWith(PREFIX) ? rawGet(key) : null),
   setItem: (key, value) => {
     if (!key.startsWith(PREFIX)) return;
+    if (authWritesBlocked && key.startsWith(`${PREFIX}auth`)) return;
     try {
       localStorage.setItem(key, value);
     } catch {
