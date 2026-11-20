@@ -4,8 +4,9 @@ Contrôles Supabase lancés après les migrations `20261119140022_schema.sql`,
 `20261119140225_revoke_rls_auto_enable.sql`, `20261119140518_coaches_members_email_sync.sql`,
 `20261119141537_invite_code.sql`, `20261119141814_code_attempts_pk.sql`,
 `20261119142821_teams.sql`, `20261119144207_storage.sql` et
-`20261119144500_teams_hardening.sql`
-(projet de développement, 19/11/2026). Les noms de fichiers reprennent la version
+`20261119144500_teams_hardening.sql`, `20261119145634_storage_strict_names.sql` et
+`20261119150749_photos_jpeg_only.sql`
+(projet de développement, 19/11/2026 ; dernier contrôle complet : 20/11/2026, voir la section finale). Les noms de fichiers reprennent la version
 enregistrée par le projet hébergé (`list_migrations`).
 
 ## Sécurité : aucune alerte
@@ -172,3 +173,86 @@ corrigé par `20261119141814_code_attempts_pk.sql` (identifiant technique).
   d'isolation qui liste les fonctions de `private` exécutables : aucune par PUBLIC ou
   `anon`, et par `authenticated` seulement `is_active_coach`, `is_team_member` et
   `team_from_path`.
+
+## Contrôle final (tâche 19, 20/11/2026)
+
+Dernier passage sur le projet de développement `zuguceilohochmpnbzaz`, après toutes les
+migrations (10) et le déploiement des 2 fonctions Edge.
+
+### Alertes sécurité : 3 INFO et 8 WARN, toutes voulues
+
+- 8 WARN `authenticated_security_definer_function_executable` : `redeem_invite_code` et
+  les 7 RPC d'espace (`create_team`, `rename_team`, `add_team_member`, `cancel_invite`,
+  `remove_team_member`, `delete_team`, `claim_my_invites`). Ce sont les seules portes
+  d'écriture sur l'activation du compte, `teams`, `team_members` et `team_invites` ;
+  les clients n'ont aucun droit d'écriture direct sur ces tables. Chaque fonction
+  vérifie l'appelant (compte activé, membre de l'espace visé), a `search_path = ''`, et
+  n'est exécutable ni par `anon` ni par PUBLIC (testé dans `invite_code.test.sql` et
+  `teams.test.sql`).
+- 3 INFO `rls_enabled_no_policy` sur `private.club_invite`, `private.code_attempts`,
+  `private.invite_log` : voulu. Aucun client n'y a de droit et le schéma n'est pas exposé ;
+  RLS sans politique = tout refusé, seules les fonctions serveur y accèdent.
+
+### Alertes performance : 2 INFO « index inutilisé », gardées
+
+`teams_created_by_idx` et `team_invites_invited_by_idx` couvrent des clés étrangères
+vers `auth.users` (`on delete set null`) : sans eux, la suppression d'un compte
+parcourt toute la table. « Inutilisé » vient de ce que la base de développement est
+vide. À revoir avec de vraies données.
+
+### Risques connus et acceptés
+
+- **Course « dernier membre » dans `delete-account`** (parquée, tâche 6). La fonction
+  calcule d'abord les espaces dont l'utilisateur est le seul membre, puis efface leurs
+  photos et l'espace. Si, dans cette fenêtre, un invité rattache son invitation à l'un
+  de ces espaces, il en perd l'accès avec la suppression. Impact faible : l'espace et
+  ses données appartenaient à l'utilisateur qui supprime son compte, et l'invité n'y
+  avait pas encore accès. Une suppression conditionnelle atomique (RPC) demanderait une
+  migration avec `DELETE` : à reprendre si le besoin apparaît.
+- **Photos orphelines** (tâche 5, tâche 17).
+  - Les clients effacent d'abord les photos, puis la ligne (nageur, séance, espace). Si
+    l'application s'arrête entre les deux, des photos restent dans le bucket sans ligne.
+  - Course à la suppression d'un espace : un collègue peut déposer une photo après la
+    dernière liste vide et avant `delete_team`. Le client relance la liste jusqu'à ce que le
+    dossier soit vide, mais la fermeture complète serait côté serveur (purge ou refus
+    dans `delete_team`, ou déclencheur sur le stockage). À traiter avec la conformité RGPD
+    (photos de mineurs) : nettoyage d'administration en attendant, par exemple en listant
+    les dossiers `photos/<uuid>` dont l'espace n'existe plus.
+  - Les URL signées restent valides jusqu'à leur expiration après suppression du fichier :
+    durée de vie de 1 h au plus côté application.
+- Gateway Supabase : un 401 refusé par `verify_jwt` n'a pas d'en-têtes CORS. Le client
+  traite un échec d'appel sans statut comme « connexion nécessaire ».
+
+### Garde-fous du dépôt et règle R1 (dist)
+
+`scripts/check-guards.mjs` (`npm run guards` sur les sources, `node scripts/check-guards.mjs dist`
+sur le build, lancés en CI) :
+
+- Sources : projets Supabase interdits (`aijgczmszymfjkeegbjz`, `vijexmmydvgfpkyzkgls`),
+  `service_role` et `sb_secret_`, `localStorage` brut (hors `src/core/storage.js`),
+  attributs d'événement en ligne (`onclick=`...), anciennes clés (`swimcoach_v2`, etc.).
+- **Règle R1 sur `dist/`** : seuls « projet interdit » et « vraie clé secrète »
+  (`sb_secret_` suivi d'au moins 20 caractères) y sont contrôlés. `supabase-js` embarqué
+  contient légitimement `localStorage` et la chaîne nue `sb_secret_` (contrôle de format
+  qui refuse une clé secrète dans un navigateur) ; `service_role` n'apparaît pas dans le
+  build. Les mots `service_role` et `SUPABASE_SERVICE_ROLE_KEY` ne figurent dans le dépôt
+  que dans le script des garde-fous et son test, dans les noms de variables
+  d'environnement lus par les fonctions Edge (repli) et dans les documents de conception.
+- Aucune clé secrète dans le dépôt : les fonctions lisent `SUPABASE_SECRET_KEYS` /
+  `SUPABASE_PUBLISHABLE_KEYS` dans l'environnement fourni par Supabase.
+
+### Réglages Auth à vérifier avant la première mise en ligne
+
+Liste détaillée dans « Réglages obligatoires Supabase Auth » plus haut. Pour la mise en
+ligne, il faut en plus :
+
+- **SMTP personnalisé** configuré (le service d'e-mail intégré est limité en volume et
+  réservé aux tests) : sans lui, les e-mails de confirmation et de réinitialisation
+  n'arrivent pas.
+- **URL Configuration** : Site URL et Redirect URLs = l'adresse GitHub Pages de l'app
+  (`https://swimmcoachapp.github.io/swimcoach-app/`, à confirmer), en plus de
+  `http://localhost:5173` pour le développement.
+- « Confirm email » et « Secure email change » activés ; `db-tx-end=commit-allow-override`
+  jamais activé.
+- Les origines autorisées des fonctions Edge (`supabase/functions/_shared/cors.js`)
+  doivent contenir l'origine de la mise en ligne (`https://swimmcoachapp.github.io`).
