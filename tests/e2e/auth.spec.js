@@ -157,7 +157,8 @@ test('(f) la déconnexion efface les données de l’entraîneur et laisse l’a
     keys: Object.keys(localStorage),
     legacy: localStorage.getItem('swimcoach_v2'),
   }));
-  expect(after.keys.filter((k) => k.startsWith('swimcoach2_') && k !== 'swimcoach2_theme')).toEqual([]);
+  // seules restent les clés de l'appareil (thème, accueil déjà vu)
+  expect(after.keys.filter((k) => k.startsWith('swimcoach2_') && !['swimcoach2_theme', 'swimcoach2_welcome_seen'].includes(k))).toEqual([]);
   expect(after.legacy).toBe('ANCIENNE-APP');
 });
 
@@ -241,4 +242,39 @@ test('(j bis) XSS : un e-mail piégé reste du texte sur l’écran du code', as
   await expect(page.getByLabel('Code du club')).toBeVisible();
   await expect(page.locator('[data-screen="code"] strong')).toHaveText(evilMail);
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+});
+
+test('accueil : carrousel qui défile, boutons toujours visibles ; connexion directe ensuite sur cet appareil', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  const fake = await installFakeSupabase(page, { welcome: true, users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: false }] });
+  await page.goto('/');
+  const welcome = page.locator('[data-screen="welcome"]');
+  await expect(welcome).toBeVisible();
+  const login = welcome.getByRole('button', { name: 'Se connecter' });
+  const signup = welcome.getByRole('button', { name: 'Créer un compte' });
+  await expect(login).toBeInViewport();
+  await expect(signup).toBeInViewport();
+  await expect(welcome.locator('.welcome-slide')).toHaveCount(4);
+  await expect(welcome.locator('.welcome-dot[aria-current="true"]')).toHaveAttribute('data-dot', '0');
+  // un point mène à sa diapositive ; les boutons ne bougent pas
+  await welcome.getByRole('button', { name: /Diapositive 3/ }).click();
+  await expect(welcome.locator('.welcome-dot[aria-current="true"]')).toHaveAttribute('data-dot', '2');
+  await expect(welcome.getByRole('heading', { name: 'Suis la progression' })).toBeInViewport();
+  await expect(login).toBeInViewport();
+  // défilement automatique (horloge avancée au-delà de la pause après le geste)
+  await page.clock.install();
+  await page.clock.runFor(9000 + 4500 + 100);
+  await expect(welcome.locator('.welcome-dot[aria-current="true"]')).toHaveAttribute('data-dot', '3');
+
+  await signup.click();
+  await expect(page.getByRole('button', { name: 'Créer un compte' })).toBeVisible();
+  await page.getByRole('button', { name: '‹ Présentation de l’app' }).click();
+  await expect(welcome).toBeVisible();
+  await welcome.getByRole('button', { name: 'Se connecter' }).click();
+  await page.getByLabel('Adresse e-mail').fill('coach@toac.fr');
+  await page.getByLabel('Mot de passe').fill('motdepasse-long');
+  await page.locator('form').getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('[data-screen="code"]')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('swimcoach2_welcome_seen'))).toBe('true');
+  expect(fake.state.users).toHaveLength(1);
 });

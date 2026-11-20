@@ -11,7 +11,7 @@
 export const PREFIX = 'swimcoach2_';
 
 /** Clés de l'application (hors entraîneur) préservées par clearAllCoachData. */
-export const APP_KEYS = ['theme'];
+export const APP_KEYS = ['theme', 'welcome_seen'];
 
 /**
  * Liste les clés présentes (copie figée, pour pouvoir supprimer pendant le parcours).

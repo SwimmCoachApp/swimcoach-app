@@ -7,6 +7,7 @@ import { signIn, signUp, redeemCode, sendPasswordReset, updatePassword, signOut,
 import { pendingCount } from '../../core/outbox.js';
 import { askConfirm } from '../../app/dialog.js';
 import { renderCredentials, renderCode, renderRecovery, renderSignupSent, setMessage, setBusy, fieldValue } from './view.js';
+import { renderWelcome, markWelcomeSeen, welcomeSeen } from './welcome.js';
 
 /** Exécute une action asynchrone en bloquant le bouton ; l'erreur s'affiche sous le formulaire. */
 async function guarded(root, action) {
@@ -21,12 +22,35 @@ async function guarded(root, action) {
 }
 
 /**
+ * Accueil : présentation de l'app au premier lancement sur cet appareil, connexion directe ensuite.
+ * @param {HTMLElement} root
+ * @param {() => void} done
+ */
+export function showStart(root, done = () => {}) {
+  if (welcomeSeen()) showCredentials(root, 'login', done);
+  else showWelcome(root, done);
+}
+
+/**
+ * Carrousel de présentation, avec « Se connecter » et « Créer un compte » toujours visibles.
+ * @param {HTMLElement} root
+ * @param {() => void} done
+ */
+export function showWelcome(root, done = () => {}) {
+  renderWelcome(root, {
+    login: () => showCredentials(root, 'login', done),
+    signup: () => showCredentials(root, 'signup', done),
+  });
+}
+
+/**
  * @param {HTMLElement} root
  * @param {'login'|'signup'} [mode]
  * @param {() => void} done
  */
 export function showCredentials(root, mode = 'login', done = () => {}) {
   renderCredentials(root, mode, {
+    back: () => showWelcome(root, done),
     switchMode: () => showCredentials(root, mode === 'login' ? 'signup' : 'login', done),
     submit: (form) =>
       guarded(root, async () => {
@@ -40,6 +64,7 @@ export function showCredentials(root, mode = 'login', done = () => {}) {
           } else done();
         } else {
           await signIn(email, password);
+          markWelcomeSeen(); // appareil déjà utilisé : la connexion s'ouvrira directement la prochaine fois
           done();
         }
       }),
