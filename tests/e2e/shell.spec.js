@@ -41,7 +41,7 @@ test('le nom de l’espace est échappé et la liste permet de changer d’espac
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
 });
 
-test('changement d’espace : écran de chargement tant que le nouvel espace n’est pas ouvert, jamais les données de l’ancien', async ({ page }) => {
+test('changement d’espace : écran de chargement tant que le nouveau groupe n’est pas ouvert, jamais les données de l’ancien', async ({ page }) => {
   await open(page, [{ id: T1, name: 'Alpha' }, { id: T2, name: 'Zèbre' }]);
   let release;
   const gate = new Promise((r) => { release = r; });
@@ -49,12 +49,12 @@ test('changement d’espace : écran de chargement tant que le nouvel espace n�
   await expect(page.getByRole('button', { name: 'Zèbre' })).toBeVisible();
   await page.route('**/rest/v1/teams*', async (route) => { await gate; await route.fallback(); }); // liste des espaces lente
   await page.getByRole('button', { name: 'Zèbre' }).click();
-  await expect(page.getByText("Chargement de l'espace…")).toBeVisible();
+  await expect(page.getByText("Chargement du groupe…")).toBeVisible();
   await expect(page.locator('[data-screen]')).toHaveCount(0);
   await expect(page.locator('.top-bar-team')).toContainText('Zèbre');
   await page.getByRole('button', { name: 'Stats', exact: true }).click(); // navigation ignorée pendant le chargement
   await page.getByRole('button', { name: 'Réglages' }).click();
-  await expect(page.getByText("Chargement de l'espace…")).toBeVisible();
+  await expect(page.getByText("Chargement du groupe…")).toBeVisible();
   await expect(page.locator('[data-screen]')).toHaveCount(0);
   release();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();

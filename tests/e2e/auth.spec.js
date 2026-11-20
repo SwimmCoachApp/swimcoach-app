@@ -52,10 +52,10 @@ test('(b) compte non activé : code du club, puis création de l’espace, puis 
 
   await page.getByLabel('Code du club').fill(fake.state.clubCode);
   await page.getByRole('button', { name: 'Valider' }).click();
-  await expect(page.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
-  await expect(page.getByText("Un collègue peut aussi t'ajouter à son espace avec ton adresse e-mail.")).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Crée ton groupe' })).toBeVisible();
+  await expect(page.getByText("Un collègue peut aussi t'ajouter à son groupe avec ton adresse e-mail.")).toBeVisible();
 
-  await page.getByLabel("Nom de l'espace").fill('TOAC Natation');
+  await page.getByLabel("Nom du groupe").fill('TOAC Natation');
   await page.getByRole('button', { name: 'Créer' }).click();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
@@ -223,9 +223,9 @@ test('(j) XSS : nom d’espace et e-mail s’affichent comme du texte', async ({
   await installFakeSupabase(page, { users: [{ email: 'coach@toac.fr', password: PW, activated: true }] });
   await page.goto('/');
   await login(page, 'coach@toac.fr');
-  await expect(page.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Crée ton groupe' })).toBeVisible();
   await expect(page.locator('[data-screen="create-team"] strong')).toHaveText('coach@toac.fr');
-  await page.getByLabel("Nom de l'espace").fill(evil);
+  await page.getByLabel("Nom du groupe").fill(evil);
   await page.getByRole('button', { name: 'Créer' }).click();
   await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
   await expect(page.locator('[data-team-name]')).toContainText(evil);

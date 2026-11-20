@@ -92,7 +92,7 @@ test('(d) suppression du compte : taper SUPPRIMER, appel à delete-account, reto
   await settings(page);
   await page.getByRole('button', { name: 'Supprimer mon compte' }).click();
   const dialog = page.getByRole('dialog', { name: 'Supprimer mon compte ?' });
-  await expect(dialog).toContainText('Les espaces dont tu es le seul membre seront supprimés avec leurs données');
+  await expect(dialog).toContainText('Les groupes dont tu es le seul membre seront supprimés avec leurs données');
   const confirm = dialog.getByRole('button', { name: 'Supprimer définitivement' });
   await expect(confirm).toBeDisabled();
   await dialog.getByLabel('Tape SUPPRIMER pour confirmer').fill('supprimer');
@@ -124,7 +124,7 @@ test('(d bis) suppression du compte impossible (réseau) : message, rien n’est
 });
 
 test('nom affiché, thème et groupes depuis les réglages', async ({ page }) => {
-  const fake = await open(page);
+  const fake = await open(page, { ...seed(), features: { groups: true } });
   const A = fake.coachId('a@toac.fr');
   await settings(page);
   await page.getByLabel('Nom affiché').fill('Damien <b>R.</b>');
@@ -139,7 +139,7 @@ test('nom affiché, thème et groupes depuis les réglages', async ({ page }) =>
   await page.getByRole('button', { name: 'Sombre' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
-  await page.getByLabel('Nouveau groupe').fill('Loisirs');
+  await page.getByLabel('Nouveau groupe', { exact: true }).fill('Loisirs');
   await page.getByRole('button', { name: 'Ajouter le groupe' }).click();
   await expect(page.locator('.settings-group-row', { hasText: 'Loisirs' })).toBeVisible();
   await expect.poll(() => fake.state.tables.groups.map((g) => g.name).sort()).toEqual(['Benjamins', 'Loisirs']);
@@ -172,13 +172,13 @@ test('modifications refusées : compte, export JSON et effacement', async ({ pag
   expect(await coachKeys(page, A)).not.toContain(`swimcoach2_${A}_${TA}_outbox_rejected`);
 });
 
-test('déconnexion possible pendant le chargement d’un espace (liste des espaces bloquée)', async ({ page }) => {
+test('déconnexion possible pendant le chargement d’un groupe (liste des espaces bloquée)', async ({ page }) => {
   await open(page, seed({ teams: [{ id: TA, name: 'Alpha' }, { id: TB, name: 'Zèbre' }], members: [{ team_id: TA, email: 'a@toac.fr' }, { team_id: TB, email: 'a@toac.fr' }] }));
   await page.locator('.top-bar-team').click();
   await expect(page.getByRole('button', { name: 'Zèbre' })).toBeVisible();
   await page.route('**/rest/v1/teams*', () => {}); // ne répond jamais
   await page.getByRole('button', { name: 'Zèbre' }).click();
-  await expect(page.getByText("Chargement de l'espace…")).toBeVisible();
+  await expect(page.getByText("Chargement du groupe…")).toBeVisible();
   await page.getByRole('button', { name: 'Se déconnecter' }).click();
   await expect(page.getByRole('button', { name: 'Se connecter' })).toBeVisible();
 });
@@ -188,7 +188,7 @@ test('déconnexion possible au démarrage si la liste des espaces ne répond pas
   await page.route('**/rest/v1/teams*', () => {}); // ne répond jamais
   await page.goto('/');
   await login(page);
-  await expect(page.getByText("Chargement de l'espace…")).toBeVisible();
+  await expect(page.getByText("Chargement du groupe…")).toBeVisible();
   await page.getByRole('button', { name: 'Se déconnecter' }).click();
   await expect(page.getByRole('button', { name: 'Se connecter' })).toBeVisible();
 });
@@ -199,13 +199,13 @@ test('supprimer l’espace : taper son nom, photos effacées d’abord (par page
   fake.state.photos.set(PHOTO(TA, 'sessions', 1), { data: Buffer.from('x'), mime: 'image/jpeg', size: 1 });
   fake.state.photos.set(PHOTO(TB, 'swimmers', 1), { data: Buffer.from('x'), mime: 'image/jpeg', size: 1 });
   await settings(page);
-  await page.getByRole('button', { name: "Supprimer l'espace et toutes ses données" }).click();
-  const dialog = page.getByRole('dialog', { name: "Supprimer l'espace « TOAC Natation » ?" });
-  const confirm = dialog.getByRole('button', { name: "Supprimer l'espace" });
+  await page.getByRole('button', { name: "Supprimer le groupe et toutes ses données" }).click();
+  const dialog = page.getByRole('dialog', { name: "Supprimer le groupe « TOAC Natation » ?" });
+  const confirm = dialog.getByRole('button', { name: "Supprimer le groupe" });
   await expect(confirm).toBeDisabled();
-  await dialog.getByLabel("Tape le nom de l'espace pour confirmer").fill('TOAC Natation');
+  await dialog.getByLabel("Tape le nom du groupe pour confirmer").fill('TOAC Natation');
   await confirm.click();
-  await expect(page.getByRole('heading', { name: 'Crée ton espace' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Crée ton groupe' })).toBeVisible();
   expect([...fake.state.photos.keys()]).toEqual([PHOTO(TB, 'swimmers', 1)]);
   expect(fake.state.tables.teams).toEqual([]);
   const order = fake.calls.filter((c) => c.path === '/storage/v1/object/photos' || c.path === '/rest/v1/rpc/delete_team').map((c) => c.path);
@@ -218,11 +218,11 @@ test('supprimer l’espace sans pouvoir effacer les photos : rien n’est suppri
   fake.state.photos.set(PHOTO(TA, 'swimmers', 1), { data: Buffer.from('x'), mime: 'image/jpeg', size: 1 });
   await settings(page);
   fake.state.storageDown = true;
-  await page.getByRole('button', { name: "Supprimer l'espace et toutes ses données" }).click();
-  const dialog = page.getByRole('dialog', { name: "Supprimer l'espace « TOAC Natation » ?" });
-  await dialog.getByLabel("Tape le nom de l'espace pour confirmer").fill('TOAC Natation');
-  await dialog.getByRole('button', { name: "Supprimer l'espace" }).click();
-  await expect(page.getByText("Impossible de supprimer les photos de l'espace (vérifie ta connexion) : l'espace n'a pas été supprimé")).toBeVisible();
+  await page.getByRole('button', { name: "Supprimer le groupe et toutes ses données" }).click();
+  const dialog = page.getByRole('dialog', { name: "Supprimer le groupe « TOAC Natation » ?" });
+  await dialog.getByLabel("Tape le nom du groupe pour confirmer").fill('TOAC Natation');
+  await dialog.getByRole('button', { name: "Supprimer le groupe" }).click();
+  await expect(page.getByText("Impossible de supprimer les photos du groupe (vérifie ta connexion) : le groupe n'a pas été supprimé")).toBeVisible();
   expect(fake.state.tables.teams.map((t) => t.name)).toEqual(['TOAC Natation']);
   expect(fake.callsTo('/rest/v1/rpc/delete_team')).toHaveLength(0);
   expect(fake.state.photos.size).toBe(1);

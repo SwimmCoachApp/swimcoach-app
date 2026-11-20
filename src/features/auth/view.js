@@ -151,11 +151,11 @@ export function renderRecovery(root, h) {
  * @param {{submit: (form: HTMLFormElement) => void, signOut: () => void}} h
  */
 export function renderCreateTeam(root, email, h) {
-  const inner = `<h1 class="auth-title">Crée ton espace</h1>
-    <p class="auth-hint">Un collègue peut aussi t'ajouter à son espace avec ton adresse e-mail.</p>
+  const inner = `<h1 class="auth-title">Crée ton groupe</h1>
+    <p class="auth-hint">Un collègue peut aussi t'ajouter à son groupe avec ton adresse e-mail.</p>
     <p class="auth-hint">Ton adresse : <strong>${esc(email)}</strong></p>
     <form novalidate>
-      ${field('name', "Nom de l'espace", 'text', 'maxlength="60" autocomplete="off"')}
+      ${field('name', "Nom du groupe", 'text', 'maxlength="60" autocomplete="off"')}
       <button class="btn btn-primary" type="submit">Créer</button>
     </form>
     <div class="auth-links"><button class="btn-link" type="button" data-action="signout">Se déconnecter</button></div>`;

@@ -14,6 +14,7 @@ const sw = (n, firstname, lastname, left_season = null) => ({
 
 async function open(page, swimmers = [sw(1, 'Hugo', 'Petit'), sw(2, 'Tom', 'Martin', 2024)]) {
   const fake = await installFakeSupabase(page, {
+    features: { groups: true },
     users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: true }],
     teams: [{ id: T1, name: 'TOAC Natation' }],
     members: [{ team_id: T1, email: 'coach@toac.fr' }],

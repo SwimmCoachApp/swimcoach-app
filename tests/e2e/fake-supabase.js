@@ -39,13 +39,20 @@ const authError = (status, errorCode, msg) => new HttpError(status, { code: stat
 /**
  * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext | Array<import('@playwright/test').Page | import('@playwright/test').BrowserContext>} target
  * @param {{users?: object[], teams?: object[], members?: object[], tables?: object, clubCode?: string,
- *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number, clock?: Date|number, liveffnPages?: Record<string, string>}} [opts]
+ *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number, clock?: Date|number, liveffnPages?: Record<string, string>,
+ *   features?: {groups?: boolean}}} [opts]
+ *   features : fonctions masquées à réafficher pour le test (src/core/features.js).
  *   users : {email, password, activated?, id?, confirmed?} ; teams : {id?, name} ;
  *   members : {team_id, email} (e-mail inconnu = invitation en attente) ; tables : lignes initiales ;
  *   liveffnPages : HTML renvoyé par la fonction liveffn-proxy, par identifiant de compétition.
  *   clock : heure de la page (page.clock.install) ; les jetons sont émis et vérifiés selon cette horloge.
  */
 export async function installFakeSupabase(target, opts = {}) {
+  if (opts.features) {
+    for (const t of Array.isArray(target) ? target : [target]) {
+      await t.addInitScript((f) => { globalThis.__SWIMCOACH_FEATURES__ = f; }, opts.features);
+    }
+  }
   const state = {
     users: [],
     tables: {

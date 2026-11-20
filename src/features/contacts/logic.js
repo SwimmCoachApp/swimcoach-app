@@ -3,6 +3,7 @@ import { db, deleteLocal } from '../../core/store.js';
 import { saveRow, removeRow } from '../../core/data.js';
 import { currentSeason, swimmerIsActive } from '../../core/season.js';
 import { uploadPhoto, deletePhoto } from '../../core/photos.js';
+import { FEATURES } from '../../core/features.js';
 
 const uuid = () => crypto.randomUUID();
 const fold = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -21,6 +22,11 @@ export function groupName(sw) {
   return db.groups.get(sw.group_id)?.name ?? '';
 }
 
+/** @param {object} sw @returns {string} groupe à afficher ('' quand les groupes sont masqués, voir core/features.js) */
+export function groupLabel(sw) {
+  return FEATURES.groups ? groupName(sw) : '';
+}
+
 /** @returns {{actifs: number, archives: number}} */
 export function countSwimmers() {
   const all = [...db.swimmers.values()];
@@ -36,7 +42,7 @@ export function listSwimmers({ search = '', filter = 'actifs' } = {}) {
   const q = fold(search.trim());
   return [...db.swimmers.values()]
     .filter((sw) => (filter === 'archives' ? !swimmerIsActive(sw) : swimmerIsActive(sw)))
-    .filter((sw) => !q || fold(`${sw.firstname} ${sw.lastname}`).includes(q) || fold(groupName(sw)).includes(q))
+    .filter((sw) => !q || fold(`${sw.firstname} ${sw.lastname}`).includes(q) || fold(groupLabel(sw)).includes(q))
     .sort((a, b) => (a.lastname || '').localeCompare(b.lastname || '', 'fr') || a.firstname.localeCompare(b.firstname, 'fr'));
 }
 
@@ -68,7 +74,9 @@ export async function saveSwimmer(form) {
       photoFailed = true;
     }
   }
-  const group = db.groups.has(form.group_id) ? form.group_id : null;
+  // group_id absent du formulaire (groupes masqués) : le nageur garde son groupe
+  const wanted = form.group_id === undefined ? existing?.group_id : form.group_id;
+  const group = db.groups.has(wanted) ? wanted : null;
   saveRow('swimmers', swimmerRow({
     ...existing,
     id,

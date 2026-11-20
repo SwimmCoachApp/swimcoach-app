@@ -79,7 +79,7 @@ onCoachChange((coach) => {
  * @throws {Error} si une page échoue (jamais de liste tronquée)
  */
 export async function fetchAll(table, teamId = getContext()?.teamId) {
-  if (!teamId) throw new Error('Aucun espace ouvert');
+  if (!teamId) throw new Error('Aucun groupe ouvert');
   const all = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     let q = supabase.from(table).select('*').eq('team_id', teamId);
@@ -167,7 +167,7 @@ async function runMembership(coachId, teamId) {
     return 'member';
   }
   const wasOpen = forgetTeam(coachId, teamId);
-  hooks.toast(`Tu n'as plus accès à l'espace « ${name} »`);
+  hooks.toast(`Tu n'as plus accès au groupe « ${name} »`);
   if (wasOpen) {
     const next = teams[0] ?? null;
     if (next) setCurrentTeam(next.id);

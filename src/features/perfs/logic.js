@@ -137,7 +137,7 @@ function collectPerfRows(preview) {
 export async function importCompetition(compId) {
   const ctx = getContext();
   const html = await fetchLiveFFN(compId);
-  if (!isOpen(ctx)) throw new PerfsError("L'espace a changé pendant la recherche");
+  if (!isOpen(ctx)) throw new PerfsError("Le groupe a changé pendant la recherche");
   const parsed = parseLiveFFNHTML(html);
   if (!parsed.swimmers || parsed.swimmers.length === 0) throw new PerfsError('Aucun nageur TOAC trouvé pour cette compétition');
   const { matched, unmatched, ignoredArchived } = matchSwimmersToDB(parsed.swimmers, parsed.competition.date, [...db.swimmers.values()]);
@@ -146,7 +146,7 @@ export async function importCompetition(compId) {
   preview.perfCount = built.rows.length;
   preview.merged = built.merged;
   preview.confirm = () => {
-    if (!isOpen(ctx)) throw new PerfsError("L'espace a changé : relance l'import");
+    if (!isOpen(ctx)) throw new PerfsError("Le groupe a changé : relance l'import");
     const rows = buildPerfRows(preview);
     for (const row of rows) saveRow('performances', row);
     return rows.length;

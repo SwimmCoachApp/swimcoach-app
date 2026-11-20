@@ -6,6 +6,7 @@ import { normalizeName } from '../../core/names.js';
 import { dateKey } from '../../core/dates.js';
 import { swimmerIsActive } from '../../core/season.js';
 import { saveSwimmer, listGroups, addGroup } from './logic.js';
+import { FEATURES } from '../../core/features.js';
 
 /** Au-delà, le fichier est refusé (l'écran ne doit pas se figer). */
 export const MAX_IMPORT_ROWS = 1000;
@@ -244,6 +245,7 @@ const groupOf = (r) => r.group.trim() || DEFAULT_GROUP;
  * @returns {string[]} noms de groupes à créer (une fois chacun, comparaison sans accents ni casse)
  */
 export function groupsToCreate(rows, groups) {
+  if (!FEATURES.groups) return [];
   const known = new Set(groups.map((g) => fold(g.name)));
   const out = new Map();
   for (const r of rows) {
@@ -265,11 +267,11 @@ export async function runImport(rows) {
   let failed = 0;
   for (const r of rows) {
     const name = groupOf(r);
-    if (!byName.has(fold(name))) {
+    if (FEATURES.groups && !byName.has(fold(name))) {
       const res = addGroup(name);
       if (res.ok) { byName.set(fold(name), res.id); groupsCreated++; }
     }
-    const group_id = byName.get(fold(name)) ?? null;
+    const group_id = FEATURES.groups ? byName.get(fold(name)) ?? null : null; // masqués : colonne Groupe ignorée
     try {
       await saveSwimmer({ firstname: r.firstname, lastname: r.lastname, dob: r.dob, group_id, phone: r.phone, email: r.email });
       created++;
