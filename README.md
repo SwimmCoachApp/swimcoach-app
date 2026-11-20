@@ -32,9 +32,11 @@ Les tests de bout en bout (`tests/e2e/`) construisent l'application, la servent 
 ## Déploiement (GitHub Pages)
 
 `.github/workflows/ci.yml` lance, à chaque push et chaque PR : `npm ci`, `npm run guards`,
-`npm test`, `npm run build`, `check-guards dist`, Playwright, puis le job `db-tests`
-(pgTAP sur une base locale). `.github/workflows/deploy.yml` publie `dist/` sur
-GitHub Pages à chaque push sur `main`.
+`npm test`, `npm run build`, `check-guards dist`, Playwright, puis un dernier build contrôlé
+par `check-guards dist`, et le job `db-tests` (pgTAP sur une base locale, CLI Supabase 3.2.0).
+Le job `deploy` du même fichier publie ce `dist/` contrôlé sur GitHub Pages, **seulement** sur un
+push vers `main` et **seulement** si `test` et `db-tests` sont verts (`needs`). Il n'y a plus de
+workflow de déploiement séparé.
 
 Avant la première mise en ligne (à faire une fois, par Damien) :
 
@@ -65,7 +67,7 @@ autour. Chaque compte a 5 essais par heure.
 
 Fichiers dans `supabase/tests/database/` ; procédure détaillée dans `docs/db-tests.md`.
 
-- **En CI** : `supabase start`, `supabase db reset`, `supabase test db`.
+- **En CI** : `supabase start` (applique les migrations), `supabase test db`.
 - **Sur le projet hébergé** (sans Docker) : l'outil `execute_sql` ne renvoie que le dernier
   résultat, donc chaque fichier est envoyé en une seule requête préparée par
   `node scripts/db-test-bundle.mjs supabase/tests/database/<fichier>.test.sql`
@@ -87,7 +89,7 @@ Fichiers dans `supabase/tests/database/` ; procédure détaillée dans `docs/db-
 | 10.6 | Parité : un test par écran et par PDF | Calendrier `calendar.spec.js` ; contacts `contacts.spec.js`, `import.spec.js` ; présences `presence.spec.js` ; stats `stats.spec.js` (+ PDF) ; planning `planning.spec.js` (+ PDF) ; perfs `perfs.spec.js` (+ bilan PDF) ; coque `shell.spec.js` ; logique : `tests/unit/` |
 | 10.7 | Suppression du compte : espaces à un seul membre effacés (lignes et fichiers), espaces partagés intacts | `tests/unit/edge-functions.test.js` (delete-account, `soleMemberTeams`, photos d'abord) ; `tests/e2e/settings.spec.js` (d), (d bis) ; `teams.test.sql` (`delete_team` en cascade, TB intacte). **Manuel** pour l'appel réel de la fonction déployée : voir ci-dessous |
 | 10.8 | Hors ligne : lecture, puis synchronisation au retour du réseau | `tests/e2e/offline.spec.js` ; `contacts.spec.js` (photo hors ligne) ; `team-members.spec.js` (f) ; `tests/unit/outbox.test.js`, `tests/unit/sync.test.js` |
-| 10.9 | `npm run build` produit un dossier déployable ; la CI passe avant la mise en ligne | `.github/workflows/ci.yml` (la chaîne complète ci-dessus) ; `.github/workflows/deploy.yml` ; `tests/e2e/smoke.spec.js` (le build est servi et se charge) |
+| 10.9 | `npm run build` produit un dossier déployable ; la CI passe avant la mise en ligne | `.github/workflows/ci.yml` : job `deploy` avec `needs: [test, db-tests]`, sur push vers `main` seulement ; il publie le `dist/` construit et contrôlé par `check-guards dist` dans le job `test` ; `tests/e2e/smoke.spec.js` (le build est servi et se charge). Le premier passage vert de `db-tests` en CI reste à constater sur la PR |
 | 10.10 | Contrôles de sécurité Supabase : aucune alerte non justifiée | Outils `get_advisors` (sécurité et performance) ; alertes et justifications dans `docs/security-notes.md`, section « Contrôle final » |
 
 ### Contrôles manuels (non automatisables ici)
@@ -103,7 +105,14 @@ Fichiers dans `supabase/tests/database/` ; procédure détaillée dans `docs/db-
 - **Fonctions Edge déployées** (`delete-account`, `liveffn-proxy`) : sans jeton, la réponse est 401 ;
   avec le jeton d'un compte de test, `liveffn-proxy` renvoie la page et `delete-account`
   efface un compte de test (et ses espaces à un seul membre). À faire depuis l'application déployée.
-- **Hors ligne sur appareil réel** : mode avion après un premier chargement, puis retour du réseau.
+- **Hors ligne sur appareil réel, sous l'adresse Pages** (l'adresse de mise en ligne, sous-chemin compris) :
+  installation du service worker, mode avion après un premier chargement, rechargement hors ligne,
+  puis retour du réseau. Le test e2e hors ligne tourne à la racine `/` seulement.
+- **Sous l'adresse Pages** : les liens des e-mails (confirmation du compte) et la redirection
+  « Mot de passe oublié ? » ouvrent bien l'application déployée (URL de redirection autorisée
+  dans Supabase Auth).
+- **Fonctions Edge, CORS** : depuis l'adresse Pages, la requête préalable `OPTIONS` de
+  `liveffn-proxy` et de `delete-account` répond avec les en-têtes CORS attendus (onglet Réseau).
 
 ## Structure
 

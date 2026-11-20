@@ -4,8 +4,8 @@ Contrôles Supabase lancés après les migrations `20261119140022_schema.sql`,
 `20261119140225_revoke_rls_auto_enable.sql`, `20261119140518_coaches_members_email_sync.sql`,
 `20261119141537_invite_code.sql`, `20261119141814_code_attempts_pk.sql`,
 `20261119142821_teams.sql`, `20261119144207_storage.sql` et
-`20261119144500_teams_hardening.sql`, `20261119145634_storage_strict_names.sql` et
-`20261119150749_photos_jpeg_only.sql`
+`20261119144500_teams_hardening.sql`, `20261119145634_storage_strict_names.sql`,
+`20261119150749_photos_jpeg_only.sql` et `20261120053604_realtime_no_delete.sql`
 (projet de développement, 19/11/2026 ; dernier contrôle complet : 20/11/2026, voir la section finale). Les noms de fichiers reprennent la version
 enregistrée par le projet hébergé (`list_migrations`).
 
@@ -177,7 +177,9 @@ corrigé par `20261119141814_code_attempts_pk.sql` (identifiant technique).
 ## Contrôle final (tâche 19, 20/11/2026)
 
 Dernier passage sur le projet de développement `zuguceilohochmpnbzaz`, après toutes les
-migrations (10) et le déploiement des 2 fonctions Edge.
+migrations (10) et le déploiement des 2 fonctions Edge. Revue finale (20/11/2026) :
+11e migration `20261120053604_realtime_no_delete`, puis contrôle sécurité refait : mêmes
+8 WARN et 3 INFO qu'avant, détaillés ci-dessous.
 
 ### Alertes sécurité : 3 INFO et 8 WARN, toutes voulues
 
@@ -209,6 +211,13 @@ vide. À revoir avec de vraies données.
   ses données appartenaient à l'utilisateur qui supprime son compte, et l'invité n'y
   avait pas encore accès. Une suppression conditionnelle atomique (RPC) demanderait une
   migration avec `DELETE` : à reprendre si le besoin apparaît.
+- **Course inverse dans `delete-account`** (revue finale, M-2). L'espace T a deux membres, U et V.
+  U supprime son compte : T est partagé, il n'est donc pas dans la liste des espaces à
+  effacer. Au même moment V quitte T (`remove_team_member` compte encore 2 membres et
+  l'accepte). La suppression du compte de U retire ensuite son appartenance en cascade :
+  T reste sans aucun membre. Ses lignes et ses photos (mineurs) ne sont plus accessibles
+  à personne et ne sont jamais effacées. Probabilité faible (deux actions rares dans la
+  même seconde). Détection : requête d'administration ci-dessous (espaces sans membre).
 - **Photos orphelines** (tâche 5, tâche 17).
   - Les clients effacent d'abord les photos, puis la ligne (nageur, séance, espace). Si
     l'application s'arrête entre les deux, des photos restent dans le bucket sans ligne.
@@ -220,13 +229,61 @@ vide. À revoir avec de vraies données.
     les dossiers `photos/<uuid>` dont l'espace n'existe plus.
   - Les URL signées restent valides jusqu'à leur expiration après suppression du fichier :
     durée de vie de 1 h au plus côté application.
+- **Temps réel sans DELETE** (revue finale, I-2 ; migration `20261120053604_realtime_no_delete`).
+  Supabase Realtime n'applique pas la RLS aux événements DELETE : il envoie la clé primaire
+  de l'ancienne ligne à tout abonné qui a SELECT sur la table, c'est-à-dire à tout compte
+  connecté, même non activé, quel que soit l'espace (identifiants de nageurs, séances,
+  `(team_id, week_key)`, `(team_id, coach_id)` de `team_members`...). Corrigé : la publication
+  `supabase_realtime` ne publie plus que `insert, update` et ne contient plus `team_members`
+  (testé dans `isolation.test.sql`). INSERT / UPDATE restent filtrés par la RLS et par
+  `team_id=eq.<espace>`. Conséquences côté application :
+  - une suppression faite par un collègue apparaît à la prochaine relecture de la table
+    (prochain INSERT / UPDATE de cette table, retour au premier plan, retour du réseau) ;
+  - un retrait de l'espace n'est plus signalé en direct : il est détecté à la resynchro
+    suivante (retour au premier plan ou du réseau, `checkMembership`) ou au premier envoi
+    refusé (42501 puis vérification de l'appartenance). La base refuse l'accès tout de suite.
+- **Cache d'un espace perdu** (revue finale, I-3) : à chaque lecture réussie de la liste des
+  espaces (`listMyTeams`), la file, les refus et le cache des espaces qui n'y sont plus sont
+  effacés de l'appareil, même s'ils ne sont pas ouverts. Hors ligne ou lecture en échec : rien
+  n'est effacé. L'espace ouvert est fermé par `checkMembership` (avec le message « Tu n'as plus
+  accès... »).
+- **Données d'un autre entraîneur sur l'appareil** (revue finale, M-3) : quand un entraîneur se
+  connecte (ou que sa session est retrouvée), les clés `swimcoach2_<autre>_*` des autres
+  entraîneurs sont effacées, sauf pour un entraîneur qui a encore des écritures en attente ou
+  refusées (`outboxTeams`) : elles restent sous son préfixe et ne partent jamais sous un autre
+  jeton. Cas visé : déconnexion subie (jeton révoqué ou expiré, compte supprimé ailleurs).
 - Gateway Supabase : un 401 refusé par `verify_jwt` n'a pas d'en-têtes CORS. Le client
   traite un échec d'appel sans statut comme « connexion nécessaire ».
+
+### Nettoyage d'administration (à lancer à la main, lecture seule)
+
+Repère les espaces sans membre (course inverse de `delete-account`) et les photos dont
+l'espace n'existe plus (photos orphelines). À lancer dans l'éditeur SQL du projet ; la requête
+ne fait que lister. La suppression se fait ensuite après vérification : espaces avec
+`delete from public.teams where id = '<uuid>';` (cascade sur toutes les tables de l'espace),
+photos depuis Storage (tableau de bord ou API), car le déclencheur `protect_objects_delete`
+refuse les `DELETE` SQL directs sur `storage.objects`.
+
+```sql
+select 'team_sans_membre' as kind, t.id::text as ref, t.name as detail, t.created_at as at
+from public.teams t
+where not exists (select 1 from public.team_members m where m.team_id = t.id)
+union all
+select 'photo_sans_espace', o.name, o.bucket_id, o.created_at
+from storage.objects o
+where o.bucket_id = 'photos'
+  and not exists (
+    select 1 from public.teams t
+    where t.id::text = split_part(o.name, '/', 1)
+  )
+order by kind, at;
+```
 
 ### Garde-fous du dépôt et règle R1 (dist)
 
 `scripts/check-guards.mjs` (`npm run guards` sur les sources, `node scripts/check-guards.mjs dist`
-sur le build, lancés en CI) :
+sur le build, lancés en CI ; le job `deploy` de `ci.yml` ne publie que si toute la CI est verte,
+et publie le `dist/` contrôlé) :
 
 - Sources : projets Supabase interdits (`aijgczmszymfjkeegbjz`, `vijexmmydvgfpkyzkgls`),
   `service_role` et `sb_secret_`, `localStorage` brut (hors `src/core/storage.js`),
