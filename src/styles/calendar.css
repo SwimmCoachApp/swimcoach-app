@@ -123,7 +123,7 @@
 .sess-photo-preview-actions{display:flex;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap;}
 
 /* Fiche de lecture d'une séance */
-.session-view-sheet{background:var(--modal-bg);border-radius:24px 24px 0 0;width:100%;max-width:430px;margin:0 auto;max-height:92vh;display:flex;flex-direction:column;animation:slideUp .28s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+.session-view-sheet{background:var(--modal-bg);border-radius:24px 24px 0 0;width:100%;max-width:430px;margin:0 auto;max-height:92vh;display:flex;flex-direction:column;animation:slideUp .2s cubic-bezier(.2,0,.2,1);overflow:hidden;}
 .sess-view-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);position:relative;}
 .sess-view-type-badge{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:10px;background:var(--bg3);}
 .sess-view-type-badge.sv-nat{background:var(--swim-bg);}

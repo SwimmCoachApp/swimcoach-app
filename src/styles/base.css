@@ -76,7 +76,7 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .icon-btn:active{background:rgba(255,255,255,.14);}
 
 /* ═══ BOTTOM NAV ═══ */
-.bottom-nav{display:flex;background:var(--nav-bg);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-top:1px solid var(--border);padding:8px 0 calc(var(--safe-b));flex-shrink:0;z-index:100;}
+.bottom-nav{display:flex;background:var(--nav-bg);border-top:1px solid var(--border);padding:8px 0 calc(var(--safe-b));flex-shrink:0;z-index:100;}
 .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;color:var(--text3);transition:color var(--transition);position:relative;}
 .nav-item.active{color:var(--accent);}
 .nav-item .nav-icon{font-size:20px;line-height:1;}
@@ -91,9 +91,9 @@ input,textarea,select{font-family:inherit;color:inherit;}
 /* ══════════════════════════════════════
    MODALS (sheet)
 ══════════════════════════════════════ */
-.modal-overlay{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:flex-end;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);visibility:hidden;opacity:0;pointer-events:none;transition:opacity .22s ease,visibility .22s ease;}
+.modal-overlay{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:flex-end;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .15s ease,visibility .15s ease;}
 .modal-overlay.open{visibility:visible;opacity:1;pointer-events:all;}
-.modal-sheet{width:100%;max-width:430px;margin:0 auto;background:var(--modal-bg);border-radius:24px 24px 0 0;max-height:96vh;display:flex;flex-direction:column;animation:slideUp .28s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+.modal-sheet{width:100%;max-width:430px;margin:0 auto;background:var(--modal-bg);border-radius:24px 24px 0 0;max-height:96vh;display:flex;flex-direction:column;animation:slideUp .2s cubic-bezier(.2,0,.2,1);overflow:hidden;}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal-handle{width:40px;height:4px;background:var(--border2);border-radius:4px;margin:10px auto 0;flex-shrink:0;}
 .modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 10px;flex-shrink:0;}
@@ -124,3 +124,11 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .update-banner button{padding:6px 14px;border-radius:999px;background:#FF5A36;color:#fff;font-weight:700;}
 .top-bar-title{white-space:nowrap;}
 .top-bar-team{max-width:34vw;}
+
+/* ══════════════════════════════════════
+   PERFORMANCE : les lignes des longues listes hors de l'écran ne sont ni mises en page
+   ni peintes (le navigateur garde leur dernière hauteur réelle).
+══════════════════════════════════════ */
+.contact-row-wrap{content-visibility:auto;contain-intrinsic-size:auto 72px;}
+.stat-swimmer-row{content-visibility:auto;contain-intrinsic-size:auto 96px;}
+.plan-week-block{content-visibility:auto;contain-intrinsic-size:auto 180px;}

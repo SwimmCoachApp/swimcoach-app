@@ -386,3 +386,24 @@ test('groupes masqués (réglage de l’app) : ni groupe, ni liste de groupes ; 
   await expect.poll(() => fake.state.tables.swimmers.find((s) => s.id === id)?.lastname).toBe('Roux-Martin');
   expect(fake.state.tables.swimmers.find((s) => s.id === id).group_id).toBe(G1);
 });
+
+test('fiche sur petit écran : boutons toujours visibles ; deux numéros → choix du numéro à appeler', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 560 });
+  const id = '00000001-0000-4000-8000-000000000001';
+  await open(page, { swimmers: [{ id, team_id: T1, firstname: 'Léa', lastname: 'Roux', dob: '2014-03-02', email: 'lea@toac.fr',
+    phone: 'Maman : 06 11 22 33 44 / Papa : 07.55.66.77.88', joined_season: 2025, left_season: null }] }, {});
+  await page.locator('.contact-row', { hasText: 'Léa' }).click();
+  const popup = page.locator('#contact-popup');
+  await expect(popup.getByRole('button', { name: '✏️ Modifier' })).toBeInViewport();
+  await expect(popup.getByRole('button', { name: '📦 Archiver' })).toBeInViewport();
+  await expect(popup.locator('.field-label', { hasText: 'Téléphone · Maman' })).toHaveCount(1);
+  await expect(popup.locator('.field-value', { hasText: '07 55 66 77 88' })).toHaveCount(1);
+  const choices = popup.locator('.call-choice');
+  await expect(choices).toHaveCount(2);
+  await expect(choices.first()).toBeHidden();
+  await popup.getByRole('button', { name: '📞 Appeler' }).click();
+  await expect(choices.nth(0)).toHaveAttribute('href', 'tel:0611223344');
+  await expect(choices.nth(1)).toHaveAttribute('href', 'tel:0755667788');
+  await expect(choices.nth(1)).toContainText('Papa · 07 55 66 77 88');
+  await expect(choices.nth(1)).toBeInViewport();
+});

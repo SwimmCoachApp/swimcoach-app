@@ -217,6 +217,12 @@ on('group-mail', (link, ev) => {
   }
   toast(`${count} destinataire${count > 1 ? 's' : ''}`);
 });
+on('call-choose', (btn) => {
+  const box = el('call-choices');
+  if (!box) return;
+  box.hidden = !box.hidden;
+  btn.setAttribute('aria-expanded', String(!box.hidden));
+});
 on('mode', (btn) => {
   if (btn.dataset.key === ui.filter) return;
   ui.filter = btn.dataset.key;

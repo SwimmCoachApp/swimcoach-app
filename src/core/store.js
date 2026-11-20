@@ -77,9 +77,17 @@ export function saveCache() {
   const c = ctx;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveTimer = null;
-    if (isOpen(c)) writeCache(c);
+    // Écriture (JSON de tout l'espace) quand le téléphone est libre : pas pendant un geste ou une animation.
+    // saveTimer reste posé jusqu'à l'écriture : saveCacheNow (app masquée) et resetStore la font tout de suite.
+    const write = () => {
+      if (saveTimer !== pending) return; // déjà écrite ou remplacée entre-temps
+      saveTimer = null;
+      if (isOpen(c)) writeCache(c);
+    };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(write, { timeout: 2000 });
+    else write();
   }, SAVE_DELAY_MS);
+  const pending = saveTimer;
 }
 
 /** Écrit tout de suite la sauvegarde du cache en attente, s'il y en a une. */

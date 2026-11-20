@@ -4,7 +4,7 @@ vi.mock('../../src/core/supabase.js', () => ({ supabase: { from: () => ({ upsert
 vi.mock('../../src/core/session.js', () => ({ getCoach: () => ({ id: 'A' }), onCoachChange: () => () => {} }));
 
 const { FEATURES } = await import('../../src/core/features.js');
-const { saveSwimmer, groupLabel, groupName } = await import('../../src/features/contacts/logic.js');
+const { saveSwimmer, groupLabel, groupName, phoneNumbers } = await import('../../src/features/contacts/logic.js');
 const { runImport } = await import('../../src/features/contacts/import.js');
 const { screenHtml } = await import('../../src/features/contacts/view.js');
 const { db, loadCache, resetStore, upsertLocal } = await import('../../src/core/store.js');
@@ -47,4 +47,29 @@ test('groupes réaffichés : l’import crée le groupe et y range le nageur', a
   const sw = [...db.swimmers.values()][0];
   expect(groupLabel(sw)).toBe('Élite');
   expect(screenHtml()).toContain('group-mail-select');
+});
+
+describe('phoneNumbers', () => {
+  test('un seul numéro : chiffres pour l’appel, affichage par paires', () => {
+    expect(phoneNumbers('06.11.22.33.44')).toEqual([{ tel: '0611223344', display: '06 11 22 33 44', label: '' }]);
+    expect(phoneNumbers('+33 6 11 22 33 44')).toEqual([{ tel: '+33611223344', display: '+33611223344', label: '' }]);
+  });
+  test('deux numéros séparés par / ; , « et » ou un retour à la ligne', () => {
+    for (const sep of [' / ', ';', ', ', ' et ', '\n', ' ou ']) {
+      expect(phoneNumbers(`06 11 22 33 44${sep}07 55 66 77 88`).map((p) => p.tel)).toEqual(['0611223344', '0755667788']);
+    }
+  });
+  test('deux numéros séparés par un simple espace ou un tiret', () => {
+    expect(phoneNumbers('06 11 22 33 44 06 55 66 77 88').map((p) => p.tel)).toEqual(['0611223344', '0655667788']);
+    expect(phoneNumbers('0611223344 - 0755667788').map((p) => p.tel)).toEqual(['0611223344', '0755667788']);
+  });
+  test('libellés gardés (Maman, Papa)', () => {
+    expect(phoneNumbers('Maman : 06 11 22 33 44 / Papa : 07 55 66 77 88').map((p) => [p.label, p.display]))
+      .toEqual([['Maman', '06 11 22 33 44'], ['Papa', '07 55 66 77 88']]);
+  });
+  test('vide ou sans numéro : aucun', () => {
+    expect(phoneNumbers('')).toEqual([]);
+    expect(phoneNumbers(null)).toEqual([]);
+    expect(phoneNumbers('à demander')).toEqual([]);
+  });
 });
