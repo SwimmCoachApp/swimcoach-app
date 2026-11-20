@@ -11,7 +11,7 @@ import { getCoach, onCoachChange } from './session.js';
 import { listMyTeams, getCurrentTeam, setCurrentTeam } from './teams.js';
 import { TABLES, db, keyOf, getContext, isOpen, loadCache, replaceTable, resetStore } from './store.js';
 import { configureOutbox, dropTeam, flush, flushEpoch, pendingKeys } from './outbox.js';
-import { startLive, stopLive, scheduleRefresh } from './realtime.js';
+import { startLive, stopLive, scheduleRefresh, configureLive } from './realtime.js';
 
 export { startLive, stopLive, LIVE_DELAY_MS } from './realtime.js';
 
@@ -50,6 +50,21 @@ configureOutbox({
     scheduleRefresh(op.table); // la ligne refusée revient à l'état du serveur
   },
 });
+
+configureLive({ refresh: refreshTable, resync });
+
+/**
+ * Retour au premier plan ou du réseau : appartenance d'abord (un entraîneur retiré pendant qu'il
+ * était hors ligne ne renvoie rien, sa file est effacée par checkMembership ; liste illisible : on
+ * tente quand même l'envoi), puis envoi de la file et relecture des 7 tables.
+ * @param {{coachId: string, teamId: string}} ctx espace ouvert au moment de l'événement
+ */
+async function resync(ctx) {
+  if (!isOpen(ctx)) return;
+  if ((await checkMembership()) === 'removed' || !isOpen(ctx)) return;
+  await flush(supabase, ctx.coachId, ctx.teamId);
+  await initialSync();
+}
 
 onCoachChange((coach) => {
   const ctx = getContext();

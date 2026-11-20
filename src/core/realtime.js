@@ -1,17 +1,30 @@
 /**
  * Temps réel de l'espace ouvert.
  *
- * INSERT / UPDATE : filtrés `team_id=eq.<teamId>`. DELETE : Supabase ne sait pas les filtrer et
- * n'envoie que la clé primaire ; on s'y abonne sans filtre et on relit simplement la table.
+ * INSERT / UPDATE seulement, filtrés `team_id=eq.<teamId>`. La publication `supabase_realtime`
+ * ne publie pas les DELETE (Supabase ne les filtre pas par RLS : ils exposeraient les clés
+ * primaires de tous les espaces à tout compte connecté) et ne contient pas `team_members`.
+ * Une suppression faite par un autre membre apparaît donc à la prochaine relecture de la table :
+ * prochain INSERT / UPDATE de cette table, retour au premier plan ou retour du réseau.
+ * Un retrait de l'espace est détecté à la resynchro (checkMembership) ou au premier envoi refusé.
  * Aucun contenu d'événement n'est appliqué tel quel : chaque événement programme, 800 ms plus tard,
- * une relecture de la table de l'espace (fetchAll + mergeTable).
- * `team_members` (filtré sur l'entraîneur) : tout événement relance checkMembership().
- * Au retour au premier plan et sur `online` : appartenance, flush puis initialSync.
+ * une relecture de la table de l'espace (configureLive.refresh).
+ * Au retour au premier plan et sur `online` : configureLive.resync (appartenance, flush, synchro).
+ *
+ * Ce module n'importe pas sync.js : sync.js lui fournit refresh et resync (pas d'import circulaire).
  */
 import { supabase } from './supabase.js';
 import { TABLES, getContext, isOpen } from './store.js';
-import { flush } from './outbox.js';
-import { refreshTable, checkMembership, initialSync } from './sync.js';
+
+let deps = { refresh: async () => {}, resync: async () => {} };
+
+/**
+ * Branche la relecture d'une table et la resynchro complète (fait par sync.js).
+ * @param {{refresh?: (table: string, ctx: {coachId: string, teamId: string}) => Promise<any>, resync?: (ctx: {coachId: string, teamId: string}) => Promise<any>}} next
+ */
+export function configureLive(next = {}) {
+  deps = { ...deps, ...next };
+}
 
 /** Délai entre un événement et la relecture de la table. */
 export const LIVE_DELAY_MS = 800;
@@ -22,7 +35,7 @@ let live = null;
 async function refresh(table, ctx) {
   if (live?.ctx !== ctx || !isOpen(ctx)) return;
   try {
-    await refreshTable(table, ctx);
+    await deps.refresh(table, ctx);
   } catch {
     // hors ligne : la prochaine synchro rattrapera
   }
@@ -42,18 +55,14 @@ export function scheduleRefresh(table) {
   }, LIVE_DELAY_MS);
 }
 
-async function resync() {
+function resync() {
   const ctx = live?.ctx;
   if (!ctx || !isOpen(ctx)) return;
-  try {
-    // Appartenance d'abord : un entraîneur retiré pendant qu'il était hors ligne ne renvoie rien
-    // (sa file est effacée par checkMembership). Liste illisible : on tente quand même l'envoi.
-    if ((await checkMembership()) === 'removed' || !isOpen(ctx)) return;
-    await flush(supabase, ctx.coachId, ctx.teamId);
-    await initialSync();
-  } catch {
-    // réessayé au prochain retour au premier plan
-  }
+  Promise.resolve()
+    .then(() => deps.resync(ctx))
+    .catch(() => {
+      // réessayé au prochain retour au premier plan
+    });
 }
 
 function handleVisibility() {
@@ -62,10 +71,6 @@ function handleVisibility() {
 
 function handleOnline() {
   resync();
-}
-
-function handleMembers() {
-  checkMembership().catch(() => {});
 }
 
 /** S'abonne aux changements de l'espace ouvert (remplace l'abonnement précédent). */
@@ -79,9 +84,7 @@ export function startLive() {
     const handleChange = () => scheduleRefresh(table);
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, handleChange);
     channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter }, handleChange);
-    channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table }, handleChange);
   }
-  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'team_members', filter: `coach_id=eq.${ctx.coachId}` }, handleMembers);
   channel.subscribe();
   live = { ctx, channel, timers: {} };
   document.addEventListener('visibilitychange', handleVisibility);

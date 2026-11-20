@@ -6,7 +6,7 @@ Fichiers : `supabase/tests/database/`
   (`tests.create_coach(email, activé)`, `tests.create_team(nom, membres)`,
   `tests.as_coach(id)`). C'est aussi un fichier pgTAP valide (3 assertions).
   La partie utile est entre les marqueurs `-- helpers:start` et `-- helpers:end`.
-- `isolation.test.sql` : isolation entre espaces d'équipe (146 assertions). Il
+- `isolation.test.sql` : isolation entre espaces d'équipe (148 assertions). Il
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
 - `invite_code.test.sql` : activation par le code du club (27 assertions).
 - `teams.test.sql` : espaces, membres et invitations (80 assertions).
@@ -20,10 +20,12 @@ et lus avec `pg_temp.id('clé')`.
 ## En CI (job `db-tests`)
 
 ```
-supabase start
-supabase db reset      # applique supabase/migrations/
+supabase start         # base neuve : applique supabase/migrations/ (pas besoin de db reset)
 supabase test db       # pg_prove sur supabase/tests/, par ordre alphabétique
 ```
+
+Version de la CLI figée dans `ci.yml` (`supabase/setup-cli`, `version: 3.2.0`). Tous les services
+restent démarrés : `auth` et `storage` créent les schémas utilisés par les tests.
 
 `00_helpers.sql` passe en premier et **valide** (`commit`) les fonctions de test dans
 la base locale jetable ; `isolation.test.sql` les utilise ensuite.
@@ -54,7 +56,7 @@ Le script :
    `00_helpers.sql`), `select string_agg(line, E'\n' order by n) as tap from pg_temp.tap_out;`.
 
 On envoie le contenu produit avec `execute_sql` : le résultat est la sortie TAP
-complète (`1..146`, puis `ok 1 - ...`). Si une instruction hors assertion échoue
+complète (`1..148`, puis `ok 1 - ...`). Si une instruction hors assertion échoue
 (table absente, par exemple), toute la requête échoue et la transaction est annulée.
 
 Après un passage, vérifier qu'il ne reste rien :
@@ -72,7 +74,7 @@ Des lignes de TA dans chaque table métier.
 
 - Structure : trigger `on_auth_user_created` (e-mail en minuscules, compte inactif),
   synchro de `coaches.email` quand l'e-mail du compte change,
-  publication temps réel, RLS sur toutes les tables, 34 politiques, aucun droit pour
+  publication temps réel (7 tables métier, sans `team_members`, insert et update seulement), RLS sur toutes les tables, 34 politiques, aucun droit pour
   `anon`, pas de `TRUNCATE` pour `authenticated`, droits des fonctions `private`
   (aucune exécutable par PUBLIC ou `anon` ; par `authenticated`, seulement les deux
   fonctions d'appartenance et `team_from_path`).

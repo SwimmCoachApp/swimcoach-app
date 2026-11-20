@@ -299,7 +299,7 @@ test('initialSync : vérifie l’appartenance, charge les 7 tables puis envoie l
   expect(pendingCount()).toBe(0);
 });
 
-test('startLive : INSERT/UPDATE filtrés par espace, DELETE non filtré qui relit, team_members filtré par entraîneur', async () => {
+test('startLive : INSERT/UPDATE filtrés par espace, ni DELETE ni team_members (publication sans delete)', async () => {
   vi.useFakeTimers();
   startLive();
   const ch = fake.client.channels.at(-1);
@@ -308,27 +308,31 @@ test('startLive : INSERT/UPDATE filtrés par espace, DELETE non filtré qui reli
   expect(swimmers).toEqual([
     { event: 'INSERT', schema: 'public', table: 'swimmers', filter: 'team_id=eq.T1' },
     { event: 'UPDATE', schema: 'public', table: 'swimmers', filter: 'team_id=eq.T1' },
-    { event: 'DELETE', schema: 'public', table: 'swimmers' },
   ]);
-  expect(filters.filter((f) => f.table !== 'team_members')).toHaveLength(21);
-  expect(filters.find((f) => f.table === 'team_members')).toEqual({ event: '*', schema: 'public', table: 'team_members', filter: 'coach_id=eq.A' });
+  expect(filters).toHaveLength(14);
+  expect(filters.every((f) => f.event !== 'DELETE' && f.event !== '*' && f.filter === 'team_id=eq.T1')).toBe(true);
+  expect(filters.some((f) => f.table === 'team_members')).toBe(false);
 
+  // Une suppression faite ailleurs apparaît à la relecture suivante de la table (ici sur un UPDATE).
   upsertLocal('swimmers', { id: 'gone' });
   fake.client.tables.swimmers = [{ id: 'w1', team_id: 'T1', name: 'Léo' }];
-  ch.emit('swimmers', 'DELETE', { old: { id: 'gone' } });
+  ch.emit('swimmers', 'INSERT', { new: { id: 'w2', team_id: 'T1', name: 'pas appliqué tel quel' } });
   ch.emit('swimmers', 'UPDATE', { new: { id: 'w1', team_id: 'T1', name: 'pas appliqué tel quel' } });
   expect(fake.client.calls).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(LIVE_DELAY_MS);
   expect(fake.client.calls).toHaveLength(1); // une seule relecture pour les deux événements
   expect([...db.swimmers.keys()]).toEqual(['w1']);
   expect(db.swimmers.get('w1').name).toBe('Léo');
-
-  myTeams = [{ id: 'T2', name: 'Avenirs' }];
-  ch.emit('team_members', 'DELETE', { old: {} });
-  await vi.waitFor(() => expect(toast).toHaveBeenCalled());
-  expect(listMyTeams).toHaveBeenCalled();
-  expect(toast).toHaveBeenCalledWith("Tu n'as plus accès à l'espace « Benjamins »");
+  stopLive();
   expect(ch.removed).toBe(true);
+});
+
+test("retrait d'un espace pendant qu'il est ouvert : détecté à la resynchro (retour au premier plan)", async () => {
+  startLive();
+  myTeams = [{ id: 'T2', name: 'Avenirs' }];
+  window.dispatchEvent(new Event('online'));
+  await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Tu n'as plus accès à l'espace « Benjamins »"));
+  expect(onTeamLost).toHaveBeenCalledWith({ id: 'T2', name: 'Avenirs' });
 });
 
 test('retour au premier plan et événement online : flush puis initialSync', async () => {

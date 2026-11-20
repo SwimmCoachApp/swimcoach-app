@@ -6,7 +6,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 -- helpers:include
-select plan(146);
+select plan(148);
 
 create temp table ids (k text primary key, v uuid not null);
 grant select on ids to public;
@@ -55,8 +55,13 @@ select is((select count(*) from public.coaches)::int, 4, 'le trigger crée une l
 select is((select email from public.coaches where id = pg_temp.id('c')), 'coach.c@example.test', 'e-mail recopié en minuscules');
 select ok((select activated_at is null from public.coaches where id = pg_temp.id('e')), 'un nouveau compte est inactif');
 select is((select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public'
-           and tablename in ('swimmers', 'sessions', 'presence', 'plan_weeks', 'plan_events', 'groups', 'performances', 'team_members'))::int,
-          8, 'publication temps réel : 8 tables');
+           and tablename in ('swimmers', 'sessions', 'presence', 'plan_weeks', 'plan_events', 'groups', 'performances'))::int,
+          7, 'publication temps réel : les 7 tables métier');
+select is((select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public'
+           and tablename = 'team_members')::int,
+          0, 'publication temps réel : sans team_members');
+select is((select pubinsert and pubupdate and not pubdelete and not pubtruncate from pg_publication where pubname = 'supabase_realtime'),
+          true, 'publication temps réel : insert et update seulement (ni delete ni truncate)');
 select is((select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
            where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity)::int, 0, 'RLS activée sur toutes les tables de public');
 select is((select count(*) from pg_policies where schemaname = 'public')::int, 34, '34 politiques (7 x 4 + 6)');
