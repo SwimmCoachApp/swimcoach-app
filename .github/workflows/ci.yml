@@ -1,0 +1,69 @@
+name: CI
+# Une seule chaîne : contrôles, tests unitaires, e2e, tests de la base, puis mise en ligne.
+# La mise en ligne (job deploy) n'a lieu que sur un push vers main, et seulement si
+# test ET db-tests sont verts. Elle publie le dossier dist construit et contrôlé
+# (check-guards) dans le job test : rien n'est reconstruit entre le contrôle et la publication.
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run guards
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/check-guards.mjs dist
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      # Le serveur web de Playwright reconstruit dist : on reconstruit une dernière fois et on
+      # contrôle exactement le dossier qui sera publié.
+      - name: Build final et contrôle du dossier publié
+        run: |
+          npm run build
+          node scripts/check-guards.mjs dist
+      - name: Dossier à publier (push sur main seulement)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  db-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.2.0
+      # `supabase start` applique déjà supabase/migrations/ sur une base neuve : pas de `db reset`.
+      # Tous les services restent démarrés (auth et storage créent les schémas utilisés par les tests).
+      - run: supabase start
+      - run: supabase test db
+  deploy:
+    needs: [test, db-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4

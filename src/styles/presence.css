@@ -1,0 +1,20 @@
+/* ─── Appel d'une séance (feuille séance) — bases reprises de club4, l'habillage Club est dans club.css ─── */
+.btn-sm{padding:6px 12px;border-radius:14px;font-size:12px;font-weight:600;transition:opacity var(--transition);}
+.btn-sm:active{opacity:.7;}
+.btn-outline{background:var(--bg3);border:1px solid var(--border2);}
+.presence-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.presence-header .form-label{margin:0;}
+.presence-actions{display:flex;gap:6px;}
+.presence-list{background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+.presence-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--transition);}
+.presence-row:last-child{border-bottom:none;}
+.presence-row:active{background:var(--bg3);}
+.presence-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.presence-row.checked .p-check{background:var(--green);border-color:var(--green);color:#fff;}
+.p-check{width:20px;height:20px;border-radius:50%;border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all var(--transition);}
+.p-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;position:relative;overflow:hidden;}
+.p-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;}
+.p-name{flex:1;font-size:13px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.p-group{font-size:11px;color:var(--text3);}
+.presence-empty{padding:16px;text-align:center;color:var(--text3);font-size:12px;}
+.is-deleted .presence-list,.is-deleted .presence-meter{opacity:.5;}
