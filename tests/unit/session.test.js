@@ -26,6 +26,23 @@ test('signUp refuse moins de 10 caractères sans appeler le serveur', async () =
   expect(auth.signUp).not.toHaveBeenCalled();
 });
 
+test('signUp demande que le lien de confirmation revienne vers l’app', async () => {
+  auth.signUp.mockResolvedValueOnce({ data: { session: null, user: { id: 'u' } }, error: null });
+  expect(await signUp(' a@b.fr ', 'motdepasse-long')).toBe('confirm');
+  expect(auth.signUp).toHaveBeenCalledWith({
+    email: 'a@b.fr',
+    password: 'motdepasse-long',
+    options: { emailRedirectTo: location.origin + location.pathname },
+  });
+});
+
+test('signUp : un e-mail déjà envoyé il y a moins d’une minute donne un message rassurant', async () => {
+  auth.signUp.mockResolvedValueOnce({ data: {}, error: { code: 'over_email_send_rate_limit', status: 429 } });
+  await expect(signUp('a@b.fr', 'motdepasse-long')).rejects.toThrow(
+    'Un e-mail de confirmation vient déjà de partir : vérifie ta boîte mail (et les spams). Tu pourras en redemander un dans une minute.',
+  );
+});
+
 test("signOut renvoie 'pending' sans rien effacer tant que l'outbox n'est pas vide", async () => {
   localStorage.setItem('swimcoach2_A_x', '1');
   configureSession({ getPendingCount: () => 2 });
