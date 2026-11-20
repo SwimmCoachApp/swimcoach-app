@@ -227,13 +227,21 @@ export async function sendPasswordReset(email) {
 /**
  * Enregistre un nouveau mot de passe (après le lien de réinitialisation).
  * @param {string} password au moins 10 caractères
+ * @returns {Promise<'changed'|'unchanged'>} 'unchanged' : c'était déjà le mot de passe du compte
  * @throws {Error}
  */
 export async function updatePassword(password) {
   if (password.length < MIN_PASSWORD_LENGTH) throw new Error(MSG_PASSWORD_SHORT);
   const { error } = await supabase.auth.updateUser({ password });
+  // Même mot de passe que l'actuel : le lien de réinitialisation a déjà connecté l'entraîneur et
+  // ce mot de passe est le bon, on continue sans erreur.
+  if (error?.code === 'same_password') {
+    recovering = false;
+    return 'unchanged';
+  }
   if (error) throw new Error(authMessage(error));
   recovering = false;
+  return 'changed';
 }
 
 /** Tente d'envoyer la file de l'entraîneur (en ligne seulement), sans attendre plus de FLUSH_WAIT_MS. */
