@@ -21,7 +21,7 @@ const SWIMMERS = [
 
 function seed(extra = {}) {
   return {
-    tokenTtl: 7 * 24 * 3600, // l'horloge de la page est en avance sur celle du faux serveur : le jeton doit survivre au rechargement
+    clock: MORNING, // horloge de la page (page.clock) : jetons émis selon cette heure
     users: [
       { email: 'coach@toac.fr', password: PASSWORD, activated: true },
       { email: 'collegue@toac.fr', password: PASSWORD, activated: true },

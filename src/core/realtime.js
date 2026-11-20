@@ -6,7 +6,7 @@
  * Aucun contenu d'événement n'est appliqué tel quel : chaque événement programme, 800 ms plus tard,
  * une relecture de la table de l'espace (fetchAll + mergeTable).
  * `team_members` (filtré sur l'entraîneur) : tout événement relance checkMembership().
- * Au retour au premier plan et sur `online` : flush puis initialSync.
+ * Au retour au premier plan et sur `online` : appartenance, flush puis initialSync.
  */
 import { supabase } from './supabase.js';
 import { TABLES, getContext, isOpen } from './store.js';
@@ -46,6 +46,9 @@ async function resync() {
   const ctx = live?.ctx;
   if (!ctx || !isOpen(ctx)) return;
   try {
+    // Appartenance d'abord : un entraîneur retiré pendant qu'il était hors ligne ne renvoie rien
+    // (sa file est effacée par checkMembership). Liste illisible : on tente quand même l'envoi.
+    if ((await checkMembership()) === 'removed' || !isOpen(ctx)) return;
     await flush(supabase, ctx.coachId, ctx.teamId);
     await initialSync();
   } catch {

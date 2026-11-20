@@ -141,10 +141,7 @@ async function runMembership(coachId, teamId) {
   }
   if (getCoach()?.id !== coachId) return 'unknown';
   if (teams.some((t) => t.id === teamId)) return 'member';
-  const wasOpen = isOpen({ coachId, teamId });
-  if (wasOpen) closeTeam();
-  dropTeam(coachId, teamId);
-  teamStore(coachId, teamId).clear();
+  const wasOpen = forgetTeam(coachId, teamId);
   hooks.toast(`Tu n'as plus accès à l'espace « ${name} »`);
   if (wasOpen) {
     const next = teams[0] ?? null;
@@ -152,6 +149,21 @@ async function runMembership(coachId, teamId) {
     hooks.onTeamLost(next);
   }
   return 'removed';
+}
+
+/**
+ * Oublie un espace sur cet appareil (accès perdu, espace quitté ou supprimé) : le ferme s'il est ouvert,
+ * efface sa file d'attente, ses refus et son cache. Rien n'est envoyé.
+ * @param {string} coachId
+ * @param {string} teamId
+ * @returns {boolean} true si c'était l'espace ouvert
+ */
+export function forgetTeam(coachId, teamId) {
+  const wasOpen = isOpen({ coachId, teamId });
+  if (wasOpen) closeTeam();
+  dropTeam(coachId, teamId);
+  teamStore(coachId, teamId).clear();
+  return wasOpen;
 }
 
 /** Vérifie l'appartenance à un espace (appels simultanés regroupés). */
@@ -217,6 +229,7 @@ export async function openTeam(coachId, team) {
   const prev = getContext();
   if (prev && prev.coachId === coachId && prev.teamId === team.id) {
     current = { coachId, team };
+    knownNames.set(team.id, team.name); // l'espace a peut-être été renommé
     return;
   }
   current = { coachId, team };

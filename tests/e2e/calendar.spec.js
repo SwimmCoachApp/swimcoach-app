@@ -13,6 +13,7 @@ const MORNING = new Date('2026-11-20T09:00:00+01:00');
 
 async function open(page, { tables = {}, now = MORNING } = {}) {
   const fake = await installFakeSupabase(page, {
+    clock: now, // horloge de la page : jetons émis selon cette heure
     users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: true }],
     teams: [{ id: T1, name: 'TOAC Natation' }],
     members: [{ team_id: T1, email: 'coach@toac.fr' }],

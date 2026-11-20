@@ -18,6 +18,8 @@ const DEFAULT_CONFLICT = { presence: 'session_id,swimmer_id', team_members: 'tea
 const RESERVED = new Set(['select', 'order', 'limit', 'offset', 'on_conflict', 'columns', 'and', 'or']);
 const MAX_ATTEMPTS = 5;
 const TOKEN_TTL = 3600;
+/** GoTrue accepte un jeton de rafraîchissement déjà utilisé pendant 10 s (refresh_token_reuse_interval). */
+const REFRESH_REUSE_MS = 10_000;
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const nowIso = () => new Date().toISOString();
@@ -37,10 +39,11 @@ const authError = (status, errorCode, msg) => new HttpError(status, { code: stat
 /**
  * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext | Array<import('@playwright/test').Page | import('@playwright/test').BrowserContext>} target
  * @param {{users?: object[], teams?: object[], members?: object[], tables?: object, clubCode?: string,
- *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number, liveffnPages?: Record<string, string>}} [opts]
+ *   tooManyAttempts?: boolean, autoConfirm?: boolean, tokenTtl?: number, clock?: Date|number, liveffnPages?: Record<string, string>}} [opts]
  *   users : {email, password, activated?, id?, confirmed?} ; teams : {id?, name} ;
  *   members : {team_id, email} (e-mail inconnu = invitation en attente) ; tables : lignes initiales ;
  *   liveffnPages : HTML renvoyé par la fonction liveffn-proxy, par identifiant de compétition.
+ *   clock : heure de la page (page.clock.install) ; les jetons sont émis et vérifiés selon cette horloge.
  */
 export async function installFakeSupabase(target, opts = {}) {
   const state = {
@@ -55,8 +58,13 @@ export async function installFakeSupabase(target, opts = {}) {
     tokenTtl: opts.tokenTtl ?? TOKEN_TTL,
     attempts: {},
     refreshTokens: new Map(),
+    usedRefreshTokens: new Map(), // jeton déjà utilisé -> {userId, at}
+    // Décalage de l'horloge du serveur d'authentification : les tests qui avancent l'horloge de la page
+    // (page.clock) passent `clock` pour que les jetons ne paraissent pas expirés côté client.
+    clockOffsetMs: opts.clock !== undefined ? new Date(opts.clock).getTime() - Date.now() : 0,
     signedTokens: new Map(),
     offline: false, // vrai : toute requête est coupée comme si le réseau était absent
+    storageDown: false, // vrai : le stockage répond 503 (sauf la lecture d'une URL signée)
   };
   const calls = [];
   const T = state.tables;
@@ -106,8 +114,9 @@ export async function installFakeSupabase(target, opts = {}) {
     identities: [{ id: u.id, user_id: u.id, provider: 'email', identity_data: { email: u.email, sub: u.id } }],
     created_at: nowIso(), updated_at: nowIso(),
   });
+  const authNow = () => Date.now() + state.clockOffsetMs;
   function makeToken(u, ttl = state.tokenTtl) {
-    const iat = Math.floor(Date.now() / 1000);
+    const iat = Math.floor(authNow() / 1000);
     const payload = { sub: u.id, email: u.email, role: 'authenticated', aud: 'authenticated', iat, exp: iat + ttl };
     return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.fake-signature`;
   }
@@ -116,7 +125,7 @@ export async function installFakeSupabase(target, opts = {}) {
     state.refreshTokens.set(refresh, u.id);
     return {
       access_token: makeToken(u, ttl), token_type: 'bearer', expires_in: ttl,
-      expires_at: Math.floor(Date.now() / 1000) + ttl, refresh_token: refresh, user: apiUser(u),
+      expires_at: Math.floor(authNow() / 1000) + ttl, refresh_token: refresh, user: apiUser(u),
     };
   }
   function authedUser(headers, { required = true } = {}) {
@@ -128,7 +137,7 @@ export async function installFakeSupabase(target, opts = {}) {
     }
     let payload;
     try { payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()); } catch { throw pgError(401, 'PGRST301', 'JWT invalid'); }
-    if (payload.exp * 1000 < Date.now()) throw pgError(401, 'PGRST303', 'JWT expired');
+    if (payload.exp * 1000 < authNow()) throw pgError(401, 'PGRST303', 'JWT expired');
     const u = userById(payload.sub);
     if (!u && required) throw pgError(401, 'PGRST301', 'JWT invalid');
     return u ?? null;
@@ -155,10 +164,12 @@ export async function installFakeSupabase(target, opts = {}) {
         return { body: makeSession(u) };
       }
       if (query.get('grant_type') === 'refresh_token') {
-        const uid = state.refreshTokens.get(body.refresh_token);
+        // Jeton déjà utilisé il y a moins de 10 s (rafraîchissement coupé par un rechargement) : accepté, comme GoTrue.
+        const used = state.usedRefreshTokens.get(body.refresh_token);
+        const uid = state.refreshTokens.get(body.refresh_token) ?? (used && Date.now() - used.at < REFRESH_REUSE_MS ? used.userId : null);
         const u = uid && userById(uid);
         if (!u) throw authError(400, 'refresh_token_not_found', 'Invalid Refresh Token: Refresh Token Not Found');
-        state.refreshTokens.delete(body.refresh_token);
+        if (state.refreshTokens.delete(body.refresh_token)) state.usedRefreshTokens.set(body.refresh_token, { userId: u.id, at: Date.now() });
         return { body: makeSession(u) };
       }
     }
@@ -404,6 +415,13 @@ export async function installFakeSupabase(target, opts = {}) {
     }
 
     const targets = filterRows(visibleRows(table, user), query);
+    if (method === 'PATCH' && table === 'coaches') {
+      // Droit de colonne : seul display_name, et seulement sur sa propre ligne.
+      if (!user || !body || Object.keys(body).some((k) => k !== 'display_name')) throw pgError(403, '42501', 'permission denied for table coaches');
+      const own = targets.filter((r) => r.id === user.id);
+      for (const r of own) r.display_name = String(body.display_name ?? '');
+      return wantRep ? { status: 200, body: shape(project(own, select), headers) } : { status: 204, body: null };
+    }
     if (method === 'PATCH') {
       if (!user || DIRECT_WRITE_FORBIDDEN.includes(table)) throw rls();
       if (TEAM_TABLES.includes(table) && body && 'team_id' in body && !mine.has(body.team_id)) throw rls();
@@ -463,8 +481,8 @@ export async function installFakeSupabase(target, opts = {}) {
   function handleStorage(req) {
     const { method, headers } = req;
     const sub = req.path.replace(/^\/storage\/v1/, '');
-    const signed = /^\/object\/sign\/photos\/(.+)$/.exec(sub);
-    if (signed && method === 'GET') {
+    const signed = method === 'GET' && /^\/object\/sign\/photos\/(.+)$/.exec(sub);
+    if (signed) {
       const path = decodePath(signed[1]);
       const token = req.query.get('token') || '';
       const obj = state.photos.get(path);
@@ -472,6 +490,7 @@ export async function installFakeSupabase(target, opts = {}) {
       if (!grant || grant.path !== path || grant.exp < Date.now() || !obj) throw storageError(400, 'InvalidJWT', 'Invalid token');
       return { status: 200, raw: obj.data, contentType: obj.mime };
     }
+    if (state.storageDown) throw storageError(503, 'ServiceUnavailable', 'storage unavailable');
     const user = authedUser(headers, { required: false });
     const mine = user ? teamIdsOf(user.id) : new Set();
     const upload = /^\/object\/photos\/(.+)$/.exec(sub);
@@ -498,6 +517,25 @@ export async function installFakeSupabase(target, opts = {}) {
       state.signedTokens.set(token, { path, exp: Date.now() + ttl * 1000 });
       return { body: { signedURL: `/object/sign/photos/${path}?token=${token}` } };
     }
+    if (method === 'POST' && sub === '/object/list/photos') {
+      // Liste d'un « dossier » : sous-dossiers (id null) puis fichiers, triés par nom, paginés (limit / offset).
+      if (!user) throw storageRls();
+      const prefix = String(req.body?.prefix ?? '').replace(/^\/+|\/+$/g, '');
+      const dir = prefix ? `${prefix}/` : '';
+      const entries = new Map();
+      for (const [path, obj] of state.photos) {
+        if (!path.startsWith(dir) || !mine.has(teamOfPath(path))) continue;
+        const rest = path.slice(dir.length);
+        const slash = rest.indexOf('/');
+        const name = slash === -1 ? rest : rest.slice(0, slash);
+        if (!entries.has(name)) entries.set(name, slash === -1 ? { name, id: randomUUID(), metadata: { size: obj.size, mimetype: obj.mime } } : { name, id: null, metadata: null });
+      }
+      const sorted = [...entries.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      const offset = Number(req.body?.offset ?? 0);
+      const limit = Number(req.body?.limit ?? 100);
+      state.storageLists = (state.storageLists ?? 0) + 1;
+      return { body: sorted.slice(offset, offset + limit) };
+    }
     if (method === 'DELETE' && sub === '/object/photos') {
       if (!user) throw storageRls();
       const removed = [];
@@ -515,8 +553,30 @@ export async function installFakeSupabase(target, opts = {}) {
   // `state.liveffnStatus` force une réponse d'erreur (502, 504…).
   state.liveffnPages = { ...(opts.liveffnPages ?? {}) };
   state.liveffnStatus = null;
+  // delete-account : même contrat que supabase/functions/_shared/delete-account.js. Les espaces dont
+  // l'entraîneur est le seul membre partent avec leurs photos et leurs données, puis le compte.
+  function deleteAccount(req) {
+    if (req.method !== 'POST') return { status: 405, body: { error: 'method_not_allowed' } };
+    let user = null;
+    try { user = authedUser(req.headers, { required: false }); } catch { user = null; }
+    if (!user) return { status: 401, body: { error: 'unauthorized' } };
+    const mine = [...new Set(T.team_members.filter((m) => m.coach_id === user.id).map((m) => m.team_id))];
+    const sole = mine.filter((t) => T.team_members.every((m) => m.team_id !== t || m.coach_id === user.id));
+    for (const teamId of sole) {
+      for (const path of [...state.photos.keys()]) if (teamOfPath(path) === teamId) state.photos.delete(path);
+      T.teams = T.teams.filter((t) => t.id !== teamId);
+      T.team_invites = T.team_invites.filter((i) => i.team_id !== teamId);
+      for (const tn of TEAM_TABLES) T[tn] = T[tn].filter((r) => r.team_id !== teamId);
+    }
+    T.team_members = T.team_members.filter((m) => m.coach_id !== user.id && !sole.includes(m.team_id));
+    T.coaches = T.coaches.filter((c) => c.id !== user.id);
+    state.users = state.users.filter((u) => u.id !== user.id);
+    for (const [rt, uid] of [...state.refreshTokens]) if (uid === user.id) state.refreshTokens.delete(rt);
+    return { body: { ok: true, deletedTeams: sole.length } };
+  }
   function handleFunctions(req) {
     const name = req.path.replace(/^\/functions\/v1\//, '');
+    if (name === 'delete-account') return deleteAccount(req);
     if (name !== 'liveffn-proxy') return { body: {} };
     if (req.method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' } };
     let user = null;

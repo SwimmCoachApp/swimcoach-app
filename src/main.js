@@ -16,6 +16,7 @@ import './styles/planning.css';
 import './styles/perfs.css';
 import './styles/club.css';
 import './styles/auth.css';
+import './styles/settings.css';
 import { initSession, getCoach, onCoachChange, onPasswordRecovery, isRecovering, configureSession } from './core/session.js';
 import { listMyTeams, getCurrentTeam, setCurrentTeam } from './core/teams.js';
 import { pendingCount, flushCoach } from './core/outbox.js';
@@ -24,8 +25,8 @@ import { ensureDefaultGroups } from './core/default-groups.js';
 import { configureSync, openTeam, closeTeam } from './core/sync.js';
 import { showCredentials, showCode, showRecovery, leaveSession } from './features/auth/index.js';
 import { showCreateTeam } from './features/teams/picker.js';
-import { startApp } from './app/shell.js';
-import { registerPlaceholderScreens } from './app/screens.js';
+import { startApp, showBootLoading } from './app/shell.js';
+import { registerSettingsScreen } from './features/settings/index.js';
 import { registerContactsScreen } from './features/contacts/index.js';
 import { registerCalendarScreen } from './features/calendar/index.js';
 import { registerStatsScreen } from './features/stats/index.js';
@@ -44,7 +45,7 @@ configureSession({ getPendingCount: (coachId) => pendingCount(undefined, coachId
 // Accès à l'espace ouvert perdu : on reprend le routage (autre espace ou « Crée ton espace »).
 configureSync({ toast, onTeamLost: () => route(), onSynced: ensureDefaultGroups });
 initTheme();
-registerPlaceholderScreens();
+registerSettingsScreen();
 registerContactsScreen();
 registerCalendarScreen();
 registerPresence();
@@ -61,6 +62,8 @@ async function route() {
   if (isRecovering()) return showRecovery(root, route);
   if (!coach) return showCredentials(root, 'login', route);
   if (!coach.activated) return showCode(root, coach, route, route);
+  // La liste des espaces peut tarder (ou ne jamais répondre) : écran d'attente avec la déconnexion.
+  if (!root.querySelector('.shell')) showBootLoading(root, route);
   await listMyTeams();
   if (current !== run) return; // un routage plus récent a pris la main
   const team = getCurrentTeam();

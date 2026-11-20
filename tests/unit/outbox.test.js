@@ -6,7 +6,7 @@ let me = { id: 'A' };
 vi.mock('../../src/core/supabase.js', () => ({ supabase: {} }));
 vi.mock('../../src/core/session.js', () => ({ getCoach: () => me, onCoachChange: () => () => {} }));
 
-const { enqueue, flush, pendingCount, pendingKeys, dropTeam, rejectedCount, ON_CONFLICT } = await import('../../src/core/outbox.js');
+const { enqueue, flush, pendingCount, pendingKeys, dropTeam, rejectedCount, listRejected, clearRejected, ON_CONFLICT } = await import('../../src/core/outbox.js');
 const { loadCache, resetStore, upsertLocal, db } = await import('../../src/core/store.js');
 
 beforeEach(() => {
@@ -198,4 +198,24 @@ test('deux ops partielles de la même clé partent toutes les deux, dans l\'ordr
     { week_key: '2026-W47', season_start: 2026, km_target: 30, team_id: 'T1' },
   ]);
   expect(pendingCount()).toBe(0);
+});
+
+test('listRejected rassemble les refus de tous les espaces ; clearRejected les efface et garde la file', async () => {
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'w1', row: { id: 'w1' } });
+  const client = makeFakeClient();
+  client.failWith = () => pgError('23514');
+  await flush(client, 'A', 'T1');
+  resetStore({ save: false });
+  loadCache('A', 'T2');
+  enqueue({ table: 'swimmers', kind: 'upsert', key: 'w2', row: { id: 'w2' } });
+  await flush(client, 'A', 'T2');
+  enqueue({ table: 'sessions', kind: 'upsert', key: 's9', row: { id: 's9' } }); // reste en attente
+  const all = listRejected('A');
+  expect(all.map((e) => [e.teamId, e.op.key, e.error.code])).toEqual([['T1', 'w1', '23514'], ['T2', 'w2', '23514']]);
+  expect(listRejected('B')).toEqual([]);
+  client.failWith = () => networkError();
+  await flush(client, 'A', 'T2');
+  clearRejected('A');
+  expect(rejectedCount(undefined, 'A')).toBe(0);
+  expect(pendingCount('T2', 'A')).toBe(1);
 });

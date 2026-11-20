@@ -1,0 +1,33 @@
+/* Réglages (design Club : cartes arrondies, boutons pleins / fantômes). */
+.settings{display:flex;flex-direction:column;gap:14px;padding-bottom:24px;}
+.settings-card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:8px;}
+.settings-title{font-family:var(--font-display);font-size:17px;font-weight:800;margin:0 0 4px;}
+.settings-sub{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin:10px 0 2px;}
+.settings-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.settings-row .form-input{flex:1 1 180px;min-width:0;}
+.settings-note{font-size:13px;color:var(--text2);margin:0;overflow-wrap:anywhere;}
+.settings-warn{font-size:14px;font-weight:700;color:var(--red);margin:0;}
+.settings-msg{font-size:13px;font-weight:600;color:var(--text);margin:0;min-height:1em;overflow-wrap:anywhere;}
+.settings-msg:empty{display:none;}
+.settings-gap{margin-top:10px;}
+.settings-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+.member-row,.invite-row,.settings-group-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;}
+.invite-row{border-style:dashed;}
+.member-text{min-width:0;flex:1;}
+.member-name{font-size:14px;font-weight:600;overflow-wrap:anywhere;}
+.member-email{font-size:12px;color:var(--text2);overflow-wrap:anywhere;}
+.member-self{font-weight:500;color:var(--text3);}
+.settings-choices{display:flex;gap:8px;}
+.settings-choice{flex:1;padding:10px;border-radius:999px;font-weight:700;background:var(--bg3);border:2px solid var(--border2);color:var(--text);}
+.settings-choice.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.settings .btn-sm{padding:9px 14px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap;}
+.settings .btn-full{flex:none;width:100%;}
+.settings-rejected{display:flex;flex-direction:column;gap:6px;}
+.dialog-typed-label{text-align:left;margin-top:4px;}
+.dialog-typed{margin-bottom:16px;}
+.btn-full:disabled{opacity:.45;cursor:not-allowed;}
+.loading-screen{display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:48px;text-align:center;}
+.loading-screen .btn-link{background:none;border:none;color:var(--text2);text-decoration:underline;font-size:14px;padding:8px;}
+/* Dans une carte (fond --card-bg = --bg3), le champ prend le fond de la page pour rester visible. */
+.settings-card .form-input{background:var(--bg);border-color:var(--border2);}
+.settings-card .form-input:focus{border-color:var(--accent);}

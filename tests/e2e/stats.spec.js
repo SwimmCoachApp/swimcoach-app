@@ -20,7 +20,7 @@ const SESSIONS = [
 
 function seed() {
   return {
-    tokenTtl: 7 * 24 * 3600,
+    clock: MORNING, // horloge de la page (page.clock) : jetons émis selon cette heure
     users: [{ email: 'coach@toac.fr', password: PASSWORD, activated: true }],
     teams: [{ id: T1, name: 'TOAC Natation' }],
     members: [{ team_id: T1, email: 'coach@toac.fr' }],

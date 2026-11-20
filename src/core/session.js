@@ -6,7 +6,7 @@
  * d'activation change (pas à chaque renouvellement de jeton).
  */
 import { supabase } from './supabase.js';
-import { coachStore, clearAllCoachData } from './storage.js';
+import { coachStore, clearAllCoachData, appStore } from './storage.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 export const MSG_PASSWORD_SHORT = 'Le mot de passe doit faire au moins 10 caractères';
@@ -16,6 +16,8 @@ let coach = null;
 let recovering = false;
 let started = null;
 let getPendingCount = () => 0;
+/** Entraîneur qui vient de se déconnecter : un renouvellement de jeton en retard ne doit pas le reconnecter. */
+let signedOutId = null;
 let flushPending = async () => {};
 
 /** Attente maximale de l'envoi de la file avant une déconnexion. */
@@ -95,6 +97,7 @@ export function initSession() {
       }
       // Pas d'appel supabase directement dans ce rappel (verrou interne) : on diffère.
       if (event === 'SIGNED_OUT') setTimeout(() => setCoach(null), 0);
+      else if (event === 'TOKEN_REFRESHED' && session?.user && session.user.id === signedOutId) setTimeout(forgetLateSession, 0);
       else if (session?.user && event !== 'INITIAL_SESSION') setTimeout(() => loadCoach(session.user), 0);
     });
     const { data } = await supabase.auth.getSession();
@@ -102,6 +105,15 @@ export function initSession() {
     return coach;
   })();
   return started;
+}
+
+/**
+ * Un renouvellement de jeton commencé avant une déconnexion (hors ligne, il réessaie en boucle) vient
+ * d'aboutir et a réécrit la session de l'entraîneur déconnecté : on l'efface sans le reconnecter.
+ */
+function forgetLateSession() {
+  const stored = appStore.get('auth');
+  if (stored?.user?.id && stored.user.id === signedOutId) appStore.remove('auth');
 }
 
 /** Traduit une erreur d'authentification en message pour l'entraîneur. */
@@ -123,6 +135,7 @@ function authMessage(error) {
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw new Error(authMessage(error));
+  signedOutId = null; // après la connexion : un renouvellement en retard de l'ancien entraîneur reste ignoré
   await loadCoach(data.user);
 }
 
@@ -203,13 +216,35 @@ export async function signOut({ force = false } = {}) {
     await tryFlush(coach?.id);
     if (getPendingCount(coach?.id) > 0) return 'pending';
   }
+  signedOutId = coach?.id ?? null;
+  // Jeton expiré hors ligne : supabase-js tente de le renouveler (en boucle, jusqu'à 30 s) avant de
+  // déconnecter. On n'attend pas plus de FLUSH_WAIT_MS : la session locale est effacée ci-dessous.
+  let timer;
   try {
-    await supabase.auth.signOut({ scope: 'local' });
-  } catch {
-    // hors ligne : la session locale est quand même supprimée ci-dessous
+    await Promise.race([
+      Promise.resolve().then(() => supabase.auth.signOut({ scope: 'local' })).catch(() => {}),
+      new Promise((resolve) => { timer = setTimeout(resolve, FLUSH_WAIT_MS); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
   recovering = false;
   clearAllCoachData();
   setCoach(null);
   return 'done';
+}
+
+/**
+ * Supprime le compte de l'entraîneur connecté (fonction serveur `delete-account` : les espaces dont il
+ * est le seul membre partent avec leurs photos et leurs données), puis efface toutes ses données
+ * locales et le déconnecte. Les écritures encore en attente sont abandonnées.
+ * @returns {Promise<number>} nombre d'espaces supprimés avec le compte
+ * @throws {Error} message français prêt à afficher (rien n'est effacé localement)
+ */
+export async function deleteAccount() {
+  if (!coach) throw new Error('Connecte-toi pour supprimer ton compte');
+  const { data, error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+  if (error || data?.ok !== true) throw new Error('Suppression du compte impossible, vérifie ta connexion et réessaie');
+  await signOut({ force: true });
+  return Number(data.deletedTeams) || 0;
 }

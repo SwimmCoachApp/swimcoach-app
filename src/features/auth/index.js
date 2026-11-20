@@ -4,6 +4,8 @@
  * doit reprendre son routage.
  */
 import { signIn, signUp, redeemCode, sendPasswordReset, updatePassword, signOut } from '../../core/session.js';
+import { pendingCount } from '../../core/outbox.js';
+import { askConfirm } from '../../app/dialog.js';
 import { renderCredentials, renderCode, renderRecovery, setMessage, setBusy, fieldValue } from './view.js';
 
 /** Exécute une action asynchrone en bloquant le bouton ; l'erreur s'affiche sous le formulaire. */
@@ -86,15 +88,34 @@ export function showRecovery(root, done) {
 }
 
 /**
- * Déconnexion demandée par l'entraîneur ; demande confirmation s'il reste des écritures non envoyées.
- * @param {() => void} [after]
+ * Texte de l'avertissement de déconnexion, accordé au nombre de modifications non envoyées.
+ * @param {number} n
+ * @returns {string}
+ */
+export function pendingText(n) {
+  return n > 1 ? `${n} modifications ne sont pas encore envoyées` : `${n} modification n'est pas encore envoyée`;
+}
+
+/**
+ * Déconnexion demandée par l'entraîneur. S'il reste des écritures non envoyées (après une tentative
+ * d'envoi bornée), une fenêtre propose « Attendre le réseau » ou « Se déconnecter quand même ».
+ * @param {() => void} [after] appelé une fois déconnecté (pas si l'entraîneur choisit d'attendre)
+ * @returns {Promise<boolean>} true si l'entraîneur est déconnecté
  */
 export async function leaveSession(after = () => {}) {
-  let result = await signOut();
-  if (result === 'pending') {
-    const ok = confirm('Des modifications ne sont pas encore envoyées. Se déconnecter les fera perdre. Continuer ?');
-    if (!ok) return;
-    result = await signOut({ force: true });
+  if ((await signOut()) === 'pending') {
+    const n = pendingCount();
+    const ok = await askConfirm({
+      icon: '📡',
+      title: 'Modifications non envoyées',
+      text: `${pendingText(n)}. ${n > 1 ? 'Si tu te déconnectes maintenant, elles seront perdues.' : 'Si tu te déconnectes maintenant, elle sera perdue.'}`,
+      cancel: 'Attendre le réseau',
+      confirm: 'Se déconnecter quand même',
+      danger: true,
+    });
+    if (!ok) return false;
+    await signOut({ force: true });
   }
   after();
+  return true;
 }

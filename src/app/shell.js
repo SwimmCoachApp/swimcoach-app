@@ -32,6 +32,39 @@ export function currentTeamName() {
   return ctx?.team.name ?? '';
 }
 
+/** @returns {{id: string, name: string}|null} espace ouvert (ou en cours d'ouverture) */
+export function currentTeam() {
+  return ctx ? { ...ctx.team } : null;
+}
+
+/**
+ * Le nom de l'espace ouvert vient de changer (renommé depuis les réglages) : met à jour la coque.
+ * @param {string} name
+ */
+export function setCurrentTeamName(name) {
+  if (!ctx) return;
+  ctx.team = { ...ctx.team, name };
+  ctx.teams = null;
+  const el = ctx.root.querySelector('[data-team-name]');
+  if (el) el.textContent = name;
+}
+
+/** Balisage de l'attente d'un espace, avec la déconnexion toujours possible (liste des espaces bloquée). */
+export const LOADING_HTML = '<div class="screen loading-screen" data-loading role="status"><p>Chargement de l\'espace…</p><button type="button" class="btn-link" data-action="logout">Se déconnecter</button></div>';
+
+/**
+ * Écran d'attente du démarrage (avant la coque) : la liste des espaces peut ne jamais répondre,
+ * la déconnexion reste possible.
+ * @param {HTMLElement} root
+ * @param {() => void} leave appelé après la déconnexion
+ */
+export function showBootLoading(root, leave) {
+  ctx = null;
+  bootLeave = leave;
+  root.innerHTML = `<main class="auth boot-loading">${LOADING_HTML}</main>`;
+}
+let bootLeave = null;
+
 /** @param {string} id identifiant d'une feuille `.modal-overlay` */
 export function openModal(id) {
   const el = document.getElementById(id);
@@ -128,7 +161,10 @@ on('toggle-theme', (el) => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
   el.textContent = currentTheme() === 'dark' ? '🌙' : '☀️';
 });
-on('logout', () => { if (ctx) leaveSession(ctx.leave); });
+on('logout', () => {
+  if (ctx) leaveSession(ctx.leave);
+  else if (bootLeave) leaveSession(bootLeave);
+});
 on('open-teams', async () => {
   if (!ctx) return;
   const body = document.getElementById('teams-body');
@@ -137,16 +173,35 @@ on('open-teams', async () => {
   openModal('modal-teams');
   try { show(await listMyTeams()); } catch { /* hors ligne : on garde l'espace ouvert */ }
 });
+/**
+ * Passe sur un autre espace : la coque n'affiche que « Chargement de l'espace… » (avec la déconnexion)
+ * jusqu'au prochain startApp ; le store de l'ancien espace est vidé tout de suite.
+ * @param {string} id
+ * @param {string} name
+ */
+export function switchTeam(id, name) {
+  if (!ctx || id === ctx.team.id) return;
+  ctx.loading = true; // la navigation est bloquée jusqu'au prochain startApp
+  ctx.team = { id, name }; // cible en cours : coche de la liste et en-tête restent cohérents
+  suspendTeam(); // coupe le temps réel et vide le store de l'ancien espace tout de suite
+  setCurrentTeam(id);
+  const shell = ctx.root.querySelector('.shell');
+  shell.querySelector('[data-team-name]').textContent = name;
+  shell.querySelector('#views').innerHTML = LOADING_HTML;
+  ctx.leave(); // reprend le routage : charge l'espace choisi puis redessine la coque
+}
+
+/** L'espace ouvert a déjà été fermé et oublié (quitté ou supprimé) : attente, puis reprise du routage. */
+export function leaveClosedTeam() {
+  if (!ctx) return;
+  ctx.loading = true;
+  ctx.teams = null;
+  ctx.root.querySelector('#views').innerHTML = LOADING_HTML;
+  ctx.leave();
+}
+
 on('switch-team', (el) => {
   closeModal('modal-teams');
   if (!ctx || el.dataset.id === ctx.team.id) return;
-  const name = el.querySelector('span')?.textContent ?? '';
-  ctx.loading = true; // la navigation est bloquée jusqu'au prochain startApp
-  ctx.team = { id: el.dataset.id, name }; // cible en cours : coche de la liste et en-tête restent cohérents
-  suspendTeam(); // coupe le temps réel et vide le store de l'ancien espace tout de suite
-  setCurrentTeam(el.dataset.id);
-  const shell = ctx.root.querySelector('.shell');
-  shell.querySelector('[data-team-name]').textContent = name;
-  shell.querySelector('#views').innerHTML = '<div class="screen" data-loading role="status"><p>Chargement de l\'espace…</p></div>';
-  ctx.leave(); // reprend le routage : charge l'espace choisi puis redessine la coque
+  switchTeam(el.dataset.id, el.querySelector('span')?.textContent ?? '');
 });

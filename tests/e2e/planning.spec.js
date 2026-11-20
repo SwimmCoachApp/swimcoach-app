@@ -9,6 +9,7 @@ const sess = (i, date, type, km) => ({ id: `33333333-3333-4333-8333-${String(i).
 
 async function open(page, { tables = {} } = {}) {
   const fake = await installFakeSupabase(page, {
+    clock: MORNING, // horloge de la page : jetons émis selon cette heure
     users: [{ email: 'coach@toac.fr', password: 'motdepasse-long', activated: true }],
     teams: [{ id: T1, name: 'TOAC Natation' }],
     members: [{ team_id: T1, email: 'coach@toac.fr' }],
