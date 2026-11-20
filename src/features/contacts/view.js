@@ -2,7 +2,7 @@
 import { html, raw } from '../../core/html.js';
 import { ageOn } from '../../core/dates.js';
 import { swimmerIsActive } from '../../core/season.js';
-import { groupLabel, phoneNumbers } from './logic.js';
+import { groupLabel, phoneNumbers, emailAddresses } from './logic.js';
 import { FEATURES } from '../../core/features.js';
 
 const initials = (sw) => `${(sw.firstname || '')[0] || ''}${(sw.lastname || '')[0] || ''}`.toUpperCase();
@@ -95,7 +95,9 @@ export function ficheHtml(sw) {
   } else if (sw.phone) {
     fields.push(['📞', 'Téléphone', sw.phone]);
   }
-  if (sw.email) fields.push(['✉️', 'Email', sw.email]);
+  const emails = emailAddresses(sw.email);
+  if (emails.length) for (const e of emails) fields.push(['✉️', 'Email', e]);
+  else if (sw.email) fields.push(['✉️', 'Email', sw.email]);
   fields.push(['🎂', 'Date de naissance', sw.dob ? formatDob(sw.dob) : 'Non renseignée']);
   if (age != null) fields.push(['🏅', 'Âge', `${age} ans`]);
   const callLabel = (p) => (p.label ? `${p.label} · ${p.display}` : p.display);
@@ -123,9 +125,9 @@ export function ficheHtml(sw) {
         <div class="call-choices-title">Quel numéro appeler ?</div>
         ${phones.map((p) => raw(html`<a class="call-choice" href="tel:${p.tel}">📞 ${callLabel(p)}</a>`))}
       </div>`) : ''}
-      ${call || sw.email ? raw(html`<div class="contact-action-btns">
+      ${call || emails.length ? raw(html`<div class="contact-action-btns">
         ${call ? raw(call) : ''}
-        ${sw.email ? raw(html`<a class="contact-action-btn btn-mail" href="mailto:${encodeURIComponent(sw.email)}">✉️ Email</a>`) : ''}
+        ${emails.length ? raw(html`<a class="contact-action-btn btn-mail" href="mailto:${emails.map(encodeURIComponent).join(',')}">✉️ Email</a>`) : ''}
       </div>`) : ''}
       <div class="contact-popup-actions">
         <button type="button" class="btn-full btn-ghost" data-action="edit-swimmer" data-id="${sw.id}">✏️ Modifier</button>

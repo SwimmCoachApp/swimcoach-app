@@ -174,8 +174,8 @@ export function mailGroups() {
 export function groupMail(groupId, teamName) {
   const emails = listSwimmers({ filter: 'actifs' })
     .filter((sw) => groupId === 'all' || sw.group_id === groupId)
-    .map((sw) => (sw.email ?? '').trim())
-    .filter((e) => EMAIL.test(e));
+    .flatMap((sw) => emailAddresses(sw.email))
+    .filter((e, i, all) => all.indexOf(e) === i); // une adresse partagée (frères et sœurs) une seule fois
   if (emails.length === 0) return { count: 0, href: '' };
   const group = groupId === 'all' ? '' : `[${db.groups.get(groupId)?.name ?? ''}] `;
   const subject = encodeURIComponent(`${group}Message de ${teamName}`);
@@ -204,4 +204,13 @@ export function phoneNumbers(raw) {
     }
   }
   return out;
+}
+
+/**
+ * Adresses d'un champ e-mail qui peut en contenir plusieurs (« a@x.fr, b@y.fr », « a@x.fr / b@y.fr »).
+ * @param {string|null|undefined} raw
+ * @returns {string[]} adresses valides, dans l'ordre
+ */
+export function emailAddresses(raw) {
+  return String(raw ?? '').split(/[\s,;/]+/).map((e) => e.trim()).filter((e) => EMAIL.test(e));
 }

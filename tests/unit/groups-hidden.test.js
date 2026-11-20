@@ -4,7 +4,7 @@ vi.mock('../../src/core/supabase.js', () => ({ supabase: { from: () => ({ upsert
 vi.mock('../../src/core/session.js', () => ({ getCoach: () => ({ id: 'A' }), onCoachChange: () => () => {} }));
 
 const { FEATURES } = await import('../../src/core/features.js');
-const { saveSwimmer, groupLabel, groupName, phoneNumbers } = await import('../../src/features/contacts/logic.js');
+const { saveSwimmer, groupLabel, groupName, phoneNumbers, emailAddresses } = await import('../../src/features/contacts/logic.js');
 const { runImport } = await import('../../src/features/contacts/import.js');
 const { screenHtml } = await import('../../src/features/contacts/view.js');
 const { db, loadCache, resetStore, upsertLocal } = await import('../../src/core/store.js');
@@ -71,5 +71,17 @@ describe('phoneNumbers', () => {
     expect(phoneNumbers('')).toEqual([]);
     expect(phoneNumbers(null)).toEqual([]);
     expect(phoneNumbers('à demander')).toEqual([]);
+  });
+});
+
+describe('emailAddresses', () => {
+  test('plusieurs adresses séparées par virgule, point-virgule, barre ou espace', () => {
+    expect(emailAddresses('dingreville@hotmail.com,simon_jonathan@hotmail.fr')).toEqual(['dingreville@hotmail.com', 'simon_jonathan@hotmail.fr']);
+    expect(emailAddresses(' a@x.fr ; b@y.fr / c@z.fr d@w.fr ')).toEqual(['a@x.fr', 'b@y.fr', 'c@z.fr', 'd@w.fr']);
+  });
+  test('texte sans adresse valide : aucune', () => {
+    expect(emailAddresses('')).toEqual([]);
+    expect(emailAddresses(null)).toEqual([]);
+    expect(emailAddresses('pas une adresse')).toEqual([]);
   });
 });

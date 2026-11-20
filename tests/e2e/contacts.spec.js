@@ -390,12 +390,21 @@ test('groupes masqués (réglage de l’app) : ni groupe, ni liste de groupes ; 
 test('fiche sur petit écran : boutons toujours visibles ; deux numéros → choix du numéro à appeler', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 560 });
   const id = '00000001-0000-4000-8000-000000000001';
-  await open(page, { swimmers: [{ id, team_id: T1, firstname: 'Léa', lastname: 'Roux', dob: '2014-03-02', email: 'lea@toac.fr',
+  await open(page, { swimmers: [{ id, team_id: T1, firstname: 'Léa', lastname: 'Roux', dob: '2014-03-02', email: 'mere@hotmail.com,pere@hotmail.fr',
     phone: 'Maman : 06 11 22 33 44 / Papa : 07.55.66.77.88', joined_season: 2025, left_season: null }] }, {});
   await page.locator('.contact-row', { hasText: 'Léa' }).click();
   const popup = page.locator('#contact-popup');
   await expect(popup.getByRole('button', { name: '✏️ Modifier' })).toBeInViewport();
   await expect(popup.getByRole('button', { name: '📦 Archiver' })).toBeInViewport();
+  // la fiche passe au-dessus de la barre du bas, et la liste derrière ne défile plus
+  const onTop = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('#contact-popup button')].find((x) => x.textContent.includes('Archiver')).getBoundingClientRect();
+    return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.closest('#contact-popup') != null;
+  });
+  expect(onTop).toBe(true);
+  await expect(page.locator('[data-screen="contacts"]')).toHaveCSS('overflow-y', 'hidden');
+  await expect(popup.locator('.field-value', { hasText: 'pere@hotmail.fr' })).toHaveCount(1);
+  await expect(popup.getByRole('link', { name: '✉️ Email' })).toHaveAttribute('href', 'mailto:mere%40hotmail.com,pere%40hotmail.fr');
   await expect(popup.locator('.field-label', { hasText: 'Téléphone · Maman' })).toHaveCount(1);
   await expect(popup.locator('.field-value', { hasText: '07 55 66 77 88' })).toHaveCount(1);
   const choices = popup.locator('.call-choice');
@@ -406,4 +415,6 @@ test('fiche sur petit écran : boutons toujours visibles ; deux numéros → cho
   await expect(choices.nth(1)).toHaveAttribute('href', 'tel:0755667788');
   await expect(choices.nth(1)).toContainText('Papa · 07 55 66 77 88');
   await expect(choices.nth(1)).toBeInViewport();
+  await popup.getByRole('button', { name: 'Fermer' }).click();
+  await expect(page.locator('[data-screen="contacts"]')).toHaveCSS('overflow-y', 'auto');
 });
