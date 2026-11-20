@@ -8,7 +8,7 @@ Case cochée : fait dans le dépôt. Case vide : à la charge de Damien ou du cl
 - [x] `capacitor.config.json` (identifiant **provisoire** `fr.toacnatation.swimcoach`, nom « SwimCoach App », `webDir` `dist`). Aucun paquet Capacitor installé, pas de dossiers `ios/` ni `android/`.
 - [x] Icône source 1024 px : `public/icons/icon-1024.png` ; écran de démarrage : `public/splash.png`. Fabriqués par `node scripts/make-store-assets.mjs` à partir du nageur du thème Club (`src/app/scene.js`).
 - [x] Suppression du compte depuis l'application (Réglages, Compte) et mot de passe oublié.
-- [x] Page de confidentialité publique `public/privacy.html` (liée depuis la connexion et les Réglages), **rédigée le 20/11/2026** : responsable = l'éditeur (Damien), contact swimcoachapp@gmail.com, durées de conservation fixées.
+- [x] Page de confidentialité publique `public/privacy.html` (liée depuis la connexion et les Réglages), **rédigée le 20/11/2026** : responsable = l'éditeur (Damien), contact swimcoachapp31@gmail.com, durées de conservation fixées.
 - [x] Procédure du compte de démonstration : `docs/demo-account.md`.
 - [x] Fonctionnement hors ligne : précache du service worker (fichiers de l'application seulement, jamais les réponses Supabase), données locales, file d'envoi (test `tests/e2e/offline.spec.js`).
 
