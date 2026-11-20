@@ -101,3 +101,14 @@ h2.perfs-section-label,h3.perfs-section-label{margin:0;}
 #btn-confirm-import-comp:disabled{opacity:.4;}
 .perf-chart-box{position:relative;height:300px;}
 .perf-chart-info{margin-top:12px;font-size:12px;color:var(--text2);text-align:center;}
+
+/* Temps de passage : la course s'ouvre au toucher */
+.perf-history-row.has-splits{cursor:pointer;}
+.perf-history-row.has-splits[aria-expanded="true"]{border-radius:12px 12px 0 0;}
+.perf-splits-chevron{color:var(--text3);font-size:12px;transition:transform var(--transition);}
+.perf-history-row[aria-expanded="true"] .perf-splits-chevron{transform:rotate(180deg);}
+.perf-splits{margin-top:-1px;padding:8px 14px 10px;border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;background:var(--bg3);display:grid;gap:4px;font-size:13px;}
+.perf-splits[hidden]{display:none;}
+.perf-splits-head,.perf-splits-row{display:grid;grid-template-columns:56px 1fr 1fr;gap:8px;font-variant-numeric:tabular-nums;}
+.perf-splits-head{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
+.perf-splits-row.last span:nth-child(2){font-weight:700;}

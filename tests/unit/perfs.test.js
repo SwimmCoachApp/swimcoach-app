@@ -201,3 +201,22 @@ describe('import : résultats en double sur la clé d’unicité (même épreuve
     expect((await importCompetition('92968')).merged).toBe(0);
   });
 });
+
+describe('temps de passage', () => {
+  const p = { splits: [
+    { dist: 100, split_display: '1:32.21', lap_display: '(49.93)' },
+    { dist: 50, split_display: '42.28', lap_display: '(42.28)' },
+    { dist: 150, split_display: '2:24.31', lap_display: '' },
+  ] };
+  test('splitsOf : triés par distance, parenthèses retirées, rien sans au moins deux passages', async () => {
+    const { splitsOf } = await import('../../src/features/perfs/logic.js');
+    expect(splitsOf(p)).toEqual([{ dist: 50, cumul: '42.28', lap: '42.28' }, { dist: 100, cumul: '1:32.21', lap: '49.93' }, { dist: 150, cumul: '2:24.31', lap: '' }]);
+    expect(splitsOf({ splits: null })).toEqual([]);
+    expect(splitsOf({ splits: [{ dist: 50, split_display: '29.10' }] })).toEqual([]);
+  });
+  test('splitsLine : ligne du bilan PDF', async () => {
+    const { splitsLine } = await import('../../src/features/perfs/view.js');
+    expect(splitsLine(p)).toBe('50 : 42.28 · 100 : 1:32.21 (49.93) · 150 : 2:24.31');
+    expect(splitsLine({ splits: null })).toBe('');
+  });
+});

@@ -264,6 +264,12 @@ async function showChart(swimmerId, evCode, pool) {
   });
 }
 
+on('perfs-splits', (row) => {
+  const panel = ui.root?.querySelector(`#splits-${CSS.escape(row.dataset.id)}`);
+  if (!panel) return;
+  panel.hidden = !panel.hidden;
+  row.setAttribute('aria-expanded', String(!panel.hidden));
+});
 on('perfs-chart', (btn) => {
   if (!ui.root || !ui.swimmerId) return;
   showChart(ui.swimmerId, btn.dataset.event, btn.dataset.pool);
