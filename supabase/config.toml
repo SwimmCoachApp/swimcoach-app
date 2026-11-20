@@ -436,3 +436,7 @@ verify_jwt = true
 [functions.delete-account]
 enabled = true
 verify_jwt = true
+
+[functions.invite-email]
+enabled = true
+verify_jwt = true

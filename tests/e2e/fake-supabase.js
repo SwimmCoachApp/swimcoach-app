@@ -582,9 +582,24 @@ export async function installFakeSupabase(target, opts = {}) {
     for (const [rt, uid] of [...state.refreshTokens]) if (uid === user.id) state.refreshTokens.delete(rt);
     return { body: { ok: true, deletedTeams: sole.length } };
   }
+  // invite-email : e-mails notés dans state.inviteEmails ; state.inviteEmailStatus force une erreur (502…).
+  state.inviteEmails = [];
+  state.inviteEmailStatus = null;
+  function inviteEmail(req) {
+    if (req.method !== 'POST') return { status: 405, body: { error: 'method_not_allowed' } };
+    let user = null;
+    try { user = authedUser(req.headers, { required: false }); } catch { user = null; }
+    if (!user) return { status: 401, body: { error: 'unauthorized' } };
+    if (state.inviteEmailStatus) return { status: state.inviteEmailStatus, body: { error: 'mail_failed' } };
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    if (state.inviteEmails.some((m) => m.team === req.body?.team && m.email === email)) return { body: { sent: false, reason: 'already_sent' } };
+    state.inviteEmails.push({ team: req.body?.team, email, by: user.id });
+    return { body: { sent: true } };
+  }
   function handleFunctions(req) {
     const name = req.path.replace(/^\/functions\/v1\//, '');
     if (name === 'delete-account') return deleteAccount(req);
+    if (name === 'invite-email') return inviteEmail(req);
     if (name !== 'liveffn-proxy') return { body: {} };
     if (req.method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' } };
     let user = null;

@@ -109,7 +109,7 @@ Fichiers dans `supabase/tests/database/` ; procédure détaillée dans `docs/db-
 - **Vrai e-mail de confirmation** : créer un compte avec une vraie adresse ; vérifier que
   l'e-mail arrive (SMTP), que le lien ouvre l'application déployée, puis que l'écran du code du club
   apparaît. Refaire avec « Mot de passe oublié ? » (lien vers « Nouveau mot de passe »).
-- **Fonctions Edge déployées** (`delete-account`, `liveffn-proxy`) : sans jeton, la réponse est 401 ;
+- **Fonctions Edge déployées** (`delete-account`, `liveffn-proxy`, `invite-email`) : sans jeton, la réponse est 401 ;
   avec le jeton d'un compte de test, `liveffn-proxy` renvoie la page et `delete-account`
   efface un compte de test (et ses espaces à un seul membre). À faire depuis l'application déployée.
 - **Hors ligne sur appareil réel, sous l'adresse Pages** (l'adresse de mise en ligne, sous-chemin compris) :

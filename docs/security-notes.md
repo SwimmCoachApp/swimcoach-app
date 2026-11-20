@@ -313,3 +313,17 @@ ligne, il faut en plus :
   jamais activé.
 - Les origines autorisées des fonctions Edge (`supabase/functions/_shared/cors.js`)
   doivent contenir l'origine de la mise en ligne (`https://swimmcoachapp.github.io`).
+
+## E-mail d'invitation (`invite-email`)
+
+- Appelée par l'app juste après `add_team_member`. Elle n'écrit qu'à une adresse que l'appelant
+  vient lui-même d'inviter ou d'ajouter dans ce groupe, depuis moins de 15 minutes. Elle vérifie
+  aussi que l'appelant est un membre activé du groupe. Elle ne peut donc pas servir à écrire à
+  une adresse quelconque.
+- Au plus un e-mail par jour pour un même couple (groupe, adresse) : table `public.invite_emails`,
+  avec RLS active, aucune politique et aucun droit client. Le journal est effacé avec le groupe.
+- La limite de 20 invitations par heure de `add_team_member` borne aussi le volume d'e-mails.
+- Envoi par le SMTP Gmail (port 465 SSL). Les secrets `SMTP_USER` et `SMTP_PASS` sont des secrets
+  de la fonction, hors dépôt. Un changement du mot de passe d'application Gmail doit être reporté
+  à deux endroits : ces secrets, et Authentication > Emails > SMTP Settings.
+- En cas d'échec d'envoi, l'invitation reste valable et l'app demande de prévenir le collègue.
