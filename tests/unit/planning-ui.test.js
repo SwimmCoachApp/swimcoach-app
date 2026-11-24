@@ -156,3 +156,74 @@ test('suppression d\'un événement déjà disparu : message, aucune opération'
   expect(ops()).toEqual([]);
   expect($('#dialog-plan-event').classList.contains('open')).toBe(false);
 });
+
+// ── Saisie sans sortie du champ (iPhone : `change` n'arrive pas si on change d'écran ou ferme l'app) ──
+const typing = (input, value) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
+const withTimers = () => vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'], now: new Date(2026, 10, 20, 9) });
+const hide = () => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  document.dispatchEvent(new Event('visibilitychange'));
+};
+afterEach(() => { delete document.visibilityState; });
+
+test('texte tapé sans sortir du champ : enregistré après une courte pause', () => {
+  withTimers();
+  const theme = fieldsOf('2026-W47', 'theme')[0];
+  typing(theme, 'Semaine technique');
+  expect(db.plan_weeks.get('2026-W47')).toBeUndefined(); // pas d'écriture à chaque lettre
+  vi.advanceTimersByTime(1000);
+  expect(db.plan_weeks.get('2026-W47')).toMatchObject({ content: 'Semaine technique', zone: '', km_target: 0 });
+  expect(ops()).toEqual(['upsert plan_weeks']);
+});
+
+test('plusieurs lettres de suite = une seule écriture, avec le dernier texte', () => {
+  withTimers();
+  const theme = fieldsOf('2026-W47', 'theme')[0];
+  typing(theme, 'S'); vi.advanceTimersByTime(200);
+  typing(theme, 'Se'); vi.advanceTimersByTime(200);
+  typing(theme, 'Sem'); vi.advanceTimersByTime(1000);
+  expect(db.plan_weeks.get('2026-W47').content).toBe('Sem');
+  expect(ops()).toEqual(['upsert plan_weeks']);
+});
+
+test('app masquée ou fermée : ce qui est en cours de saisie est enregistré tout de suite, sans attendre la pause', () => {
+  withTimers();
+  typing(fieldsOf('2026-W47', 'theme')[0], 'Volume en bassin');
+  typing(fieldsOf('2026-W48', 'zone')[0], 'seuil');
+  hide();
+  expect(db.plan_weeks.get('2026-W47')).toMatchObject({ content: 'Volume en bassin' });
+  expect(db.plan_weeks.get('2026-W48')).toMatchObject({ zone: 'seuil' });
+  vi.advanceTimersByTime(2000);
+  expect(ops()).toEqual(['upsert plan_weeks', 'upsert plan_weeks']); // pas d'écriture en double après la pause
+});
+
+test('sortie du champ après la saisie : une seule écriture (change prend la suite de input)', () => {
+  withTimers();
+  const theme = fieldsOf('2026-W47', 'theme')[0];
+  typing(theme, 'Texte');
+  theme.dispatchEvent(new Event('change', { bubbles: true }));
+  vi.advanceTimersByTime(2000);
+  expect(ops()).toEqual(['upsert plan_weeks']);
+});
+
+test('objectif km à moitié tapé (« 12, » : le navigateur rend une valeur vide) : l\'objectif existant n\'est pas remis à zéro', () => {
+  withTimers();
+  const km = fieldsOf('2026-W47', 'km')[0];
+  type(km, '15');
+  Object.defineProperty(km, 'validity', { configurable: true, value: { badInput: true } });
+  typing(km, '');
+  vi.advanceTimersByTime(2000);
+  hide();
+  expect(db.plan_weeks.get('2026-W47').km_target).toBe(15);
+});
+
+test('changement d\'espace pendant une saisie : rien n\'est écrit dans l\'espace suivant, pas de message d\'erreur', () => {
+  withTimers();
+  typing(fieldsOf('2026-W47', 'theme')[0], 'Texte');
+  resetStore({ save: false });
+  loadCache('A', '66666666-6666-4666-8666-666666666666');
+  vi.advanceTimersByTime(2000);
+  hide();
+  expect(db.plan_weeks.size).toBe(0);
+  expect(toasts).toEqual([]);
+});

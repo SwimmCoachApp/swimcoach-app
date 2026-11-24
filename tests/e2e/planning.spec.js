@@ -140,3 +140,21 @@ test('PDF du planning : exportPdf reçoit le document Club, échappé, sans scri
   expect(pdf.html).not.toContain('<img');
   expect(pdf.html).not.toContain('fonts.googleapis.com');
 });
+
+// Sur iPhone, le texte tapé dans un champ n'était enregistré qu'à la sortie du champ (événement `change`) :
+// passer l'app en arrière-plan (ou la fermer) sans sortir du champ faisait perdre ce qui venait d'être tapé.
+test('planification : le texte tapé est enregistré quand l’app passe en arrière-plan sans quitter le champ', async ({ page }) => {
+  const fake = await open(page);
+  await gotoPlanning(page);
+  const block = page.locator('[data-week-block="2026-W47"]');
+  await block.getByLabel('Zone de travail S47').fill('aérobie');
+  await block.getByLabel('Thème S47').fill('Volume en bassin');
+  await expect(block.getByLabel('Thème S47')).toBeFocused();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+  });
+  await expect.poll(() => fake.state.tables.plan_weeks[0]?.content).toBe('Volume en bassin');
+  expect(fake.state.tables.plan_weeks[0]).toMatchObject({ week_key: '2026-W47', zone: 'aérobie' });
+});
