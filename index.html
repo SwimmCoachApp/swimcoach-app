@@ -2,7 +2,12 @@
 <html lang="fr" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- App : pas de zoom (ni pincement, ni double-tape, ni zoom automatique sur un champ de saisie sous iPhone,
+         qui décale ensuite la page sur les côtés). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SwimCoach" />
     <meta name="theme-color" content="#071327" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <title>SwimCoach App</title>

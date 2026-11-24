@@ -35,6 +35,7 @@ import { registerPlanningScreen } from './features/planning/index.js';
 import { registerPerfsScreen } from './features/perfs/index.js';
 import { registerPresence } from './features/presence/index.js';
 import { initTheme } from './app/theme.js';
+import { lockPage } from './app/native-feel.js';
 import { toast } from './app/toast.js';
 import { initUpdate } from './app/update.js';
 
@@ -46,6 +47,7 @@ configureSession({ getPendingCount: (coachId) => pendingCount(undefined, coachId
 // Accès à l'espace ouvert perdu : on reprend le routage (autre espace ou « Crée ton espace »).
 configureSync({ toast, onTeamLost: () => route(), onSynced: () => { if (FEATURES.groups) ensureDefaultGroups(); }, onTeamRenamed: (t) => setCurrentTeamName(t.id, t.name) });
 initTheme();
+lockPage();
 registerSettingsScreen();
 registerContactsScreen();
 registerCalendarScreen();
