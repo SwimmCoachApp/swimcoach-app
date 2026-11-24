@@ -9,7 +9,7 @@
 import { on } from '../../app/actions.js';
 import { registerScreen, openModal, closeModal, currentTeamName } from '../../app/shell.js';
 import { toast } from '../../app/toast.js';
-import { db, subscribe, onReset } from '../../core/store.js';
+import { db, subscribe, onReset, saveCacheNow } from '../../core/store.js';
 import { currentSeason } from '../../core/season.js';
 import { exportPdf } from '../pdf/index.js';
 import { savePlanWeek, savePlanEvent, deletePlanEvent, seasonLabel, weekData, weekIsFilled, eventsOfMonth, EVENT_TYPES } from './logic.js';
@@ -21,7 +21,7 @@ const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" widt
 /** Saison affichée et mois dépliés : gardés d'un affichage à l'autre, remis à zéro à la fermeture de l'espace. */
 let nav = null;
 const ui = { root: null, unsubs: [], form: null };
-onReset(() => { nav = null; stop(); });
+onReset(() => { nav = null; stop(); discardTyping(); });
 
 function state() {
   if (!nav) {
@@ -70,7 +70,7 @@ function refresh() {
     block.classList.toggle('has-content', weekIsFilled(wd));
     const values = { zone: wd.zone || '', theme: wd.content || '', km: target || '' };
     for (const field of block.querySelectorAll('[data-field]')) {
-      if (field === active) continue; // en cours de saisie : jamais écrasé
+      if (field === active || typing.has(field)) continue; // en cours de saisie ou pas encore enregistré : jamais écrasé
       const next = String(values[field.dataset.field]);
       if (field.value !== next) field.value = next;
     }
@@ -78,9 +78,11 @@ function refresh() {
 }
 
 function render(root) {
+  flushTyping(); // saisie en attente d'un affichage précédent de l'écran
   stop();
   ui.root = root;
   root.innerHTML = screenHtml();
+  root.addEventListener('input', onTyping);
   renderTimeline();
   ui.unsubs = ['plan_weeks', 'plan_events', 'sessions'].map((t) => subscribe(t, refresh));
 }
@@ -103,16 +105,67 @@ on('plan-toggle-month', (btn) => {
 });
 
 // ── Semaines : un champ modifié = une écriture de ce champ seul ──
-on('plan-week-change', (input) => {
+// Sur iPhone, `change` n'arrive qu'à la sortie du champ : toucher la barre du bas, verrouiller le téléphone ou
+// fermer l'app sans quitter le champ ne l'envoie jamais, et ce qui venait d'être tapé était perdu. Le texte est
+// donc aussi enregistré après une courte pause de frappe (`input`), et tout de suite quand l'app est masquée.
+const TYPING_PAUSE_MS = 600;
+/** Champs tapés dont le texte n'est pas encore enregistré : champ → minuteur. */
+const typing = new Map();
+
+/** @param {HTMLInputElement|HTMLTextAreaElement} input @param {boolean} [leaving] sortie du champ : valeur normalisée */
+function saveField(input, leaving = false) {
   const { week, field } = input.dataset;
+  // un nombre à moitié tapé (« 12, ») donne une valeur vide : on attend la fin de la saisie, sans remettre l'objectif à zéro
+  if (!leaving && field === 'km' && input.validity?.badInput) return;
   const value = input.value;
   try {
     const saved = savePlanWeek(week, null, field === 'theme' ? value : null, field === 'km' ? value : null, field === 'zone' ? value : null);
-    if (field === 'km') input.value = saved.km_target || ''; // valeur normalisée (virgule, négatif)
+    if (leaving && field === 'km') input.value = saved.km_target || ''; // valeur normalisée (virgule, négatif)
   } catch {
     toast('Enregistrement impossible');
   }
+}
+
+function forgetTyping(input) {
+  clearTimeout(typing.get(input));
+  typing.delete(input);
+}
+
+/** Enregistre tout de suite ce qui est en cours de saisie (app masquée ou fermée, retour à l'écran). */
+function flushTyping() {
+  const inputs = [...typing.keys()];
+  if (!inputs.length) return;
+  for (const input of inputs) {
+    forgetTyping(input);
+    saveField(input);
+  }
+  saveCacheNow(); // l'app peut être tuée juste après : le cache de l'espace est écrit aussi
+}
+
+/** Abandonne les saisies en attente (l'espace est fermé : elles ne doivent pas être écrites dans le suivant). */
+function discardTyping() {
+  for (const input of [...typing.keys()]) forgetTyping(input);
+}
+
+function onTyping(ev) {
+  const input = ev.target;
+  if (!(input instanceof HTMLElement) || input.dataset.action !== 'plan-week-change') return;
+  forgetTyping(input);
+  typing.set(input, setTimeout(() => {
+    typing.delete(input);
+    saveField(input);
+  }, TYPING_PAUSE_MS));
+}
+
+on('plan-week-change', (input) => {
+  forgetTyping(input);
+  saveField(input, true);
 }, 'change');
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushTyping(); });
+  window.addEventListener('pagehide', flushTyping);
+}
 
 // ── Événements ──
 function openEventForm(id, mKey) {
