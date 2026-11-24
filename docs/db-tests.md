@@ -9,7 +9,7 @@ Fichiers : `supabase/tests/database/`
 - `isolation.test.sql` : isolation entre espaces d'équipe (148 assertions). Il
   commence par `begin;` et finit par `rollback;` : rien ne reste en base.
 - `invite_code.test.sql` : activation par le code du club (27 assertions).
-- `teams.test.sql` : espaces, membres et invitations (80 assertions).
+- `teams.test.sql` : espaces, membres, invitations, propriétaire du groupe (95 assertions).
 - `storage.test.sql` : stockage privé des photos, noms stricts (41 assertions).
 
 Règle d'écriture : chaque assertion pgTAP commence **en début de ligne** par
@@ -119,6 +119,10 @@ B est seul dans TB.
   droit client.
 - A crée TA (nom nettoyé, A inscrit, `created_by`). Nom vide ou trop long →
   `invalid_name`. A renomme TA.
+- **Propriétaire** (= `created_by`) : un invité ne supprime pas l'espace (`not_owner`) et ne retire pas
+  le propriétaire ; le propriétaire supprime l'espace même avec d'autres membres, et peut le quitter.
+  Sans propriétaire membre (parti, ou `created_by` nul après suppression de son compte), tout membre
+  peut supprimer l'espace.
 - `add_team_member` :
   - C (adresse en majuscules et espaces) → `added` ; une seconde fois → `already_member` ;
   - D sans compte → `invited`, une seule ligne même invité deux fois ;

@@ -101,8 +101,10 @@ export async function installFakeSupabase(target, opts = {}) {
     if (!me?.activated_at) return new Set();
     return new Set(T.team_members.filter((m) => m.coach_id === userId).map((m) => m.team_id));
   }
-  function addTeam({ id = randomUUID(), name }) {
-    T.teams.push({ id, name, created_by: null, created_at: nowIso(), updated_at: nowIso() });
+  // owner : e-mail du créateur (propriétaire du groupe) ; sans owner, created_by est nul, comme un compte supprimé
+  function addTeam({ id = randomUUID(), name, owner = null }) {
+    const created_by = owner ? userByEmail(owner)?.id ?? null : null;
+    T.teams.push({ id, name, created_by, created_at: nowIso(), updated_at: nowIso() });
     return id;
   }
   function addMember(teamId, email) {
@@ -271,12 +273,18 @@ export async function installFakeSupabase(target, opts = {}) {
       case 'remove_team_member': {
         if (!mine().has(args.team)) throw rpcError('not_allowed');
         const members = T.team_members.filter((m) => m.team_id === args.team);
+        const owner = T.teams.find((t) => t.id === args.team)?.created_by;
+        // le propriétaire (encore membre) ne peut être retiré que par lui-même
+        if (owner && owner === args.coach && owner !== user.id && members.some((m) => m.coach_id === owner)) throw rpcError('not_owner');
         if (members.length <= 1) throw rpcError('last_member');
         T.team_members = T.team_members.filter((m) => !(m.team_id === args.team && m.coach_id === args.coach));
         return null;
       }
       case 'delete_team': {
         if (!mine().has(args.team)) throw rpcError('not_allowed');
+        // seul le propriétaire supprime ; sans propriétaire membre (parti, compte supprimé), tout membre le peut
+        const owner = T.teams.find((t) => t.id === args.team)?.created_by;
+        if (owner && owner !== user.id && T.team_members.some((m) => m.team_id === args.team && m.coach_id === owner)) throw rpcError('not_owner');
         T.teams = T.teams.filter((t) => t.id !== args.team);
         T.team_members = T.team_members.filter((m) => m.team_id !== args.team);
         T.team_invites = T.team_invites.filter((i) => i.team_id !== args.team);

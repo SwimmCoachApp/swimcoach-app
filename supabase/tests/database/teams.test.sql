@@ -5,7 +5,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 -- helpers:include
-select plan(80);
+select plan(95);
 
 create temp table ids (k text primary key, v uuid not null);
 grant select, insert on ids to public;
@@ -149,13 +149,16 @@ update private.invite_log set at = now() - interval '61 minutes' where coach_id 
 select tests.as_coach(pg_temp.id('a'));
 select is(public.add_team_member(pg_temp.id('ta'), 'r21@club.fr'), 'invited', 'une heure plus tard, A peut de nouveau inviter');
 
--- ---------------------------------------------------------------- départs, dernier membre, suppression (19)
+-- ---------------------------------------------------------------- départs, dernier membre, suppression (22)
 reset role;
 insert into public.swimmers (team_id, firstname, joined_season) values (pg_temp.id('ta'), 'Léa', 2026);
 insert into public.sessions (team_id, date, type) values (pg_temp.id('ta'), '2026-11-19', 'nat');
 select tests.as_coach(pg_temp.id('c'));
-select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('a'))$$, 'C (simple membre) peut retirer A');
+select throws_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('a'))$$, 'P0001', 'not_owner', 'C (invité) ne peut pas retirer le propriétaire A');
+select throws_ok($$select public.delete_team(pg_temp.id('ta'))$$, 'P0001', 'not_owner', 'C (invité) ne supprime pas TA');
 select tests.as_coach(pg_temp.id('a'));
+select is((select count(*) from public.swimmers)::int, 1, 'A (propriétaire) voit toujours TA');
+select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('a'))$$, 'A (propriétaire) quitte TA de lui-même');
 select is((select count(*) from public.swimmers)::int, 0, 'A retiré ne voit plus rien de TA');
 select throws_ok($$select public.add_team_member(pg_temp.id('ta'), 'x@club.fr')$$, 'P0001', 'not_allowed', 'A retiré ne peut plus inviter');
 select throws_ok($$select public.rename_team(pg_temp.id('ta'), 'pirate')$$, 'P0001', 'not_allowed', 'A retiré ne renomme plus TA');
@@ -172,7 +175,7 @@ select lives_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id(
 select is((select count(*) from public.team_members where team_id = pg_temp.id('ta'))::int, 1, 'C est seul dans TA');
 select throws_ok($$select public.remove_team_member(pg_temp.id('ta'), pg_temp.id('c'))$$, 'P0001', 'last_member', 'le dernier membre ne peut pas partir');
 select is((select count(*) from public.sessions where team_id = pg_temp.id('ta'))::int, 1, 'C voit toujours la séance de TA');
-select lives_ok($$select public.delete_team(pg_temp.id('ta'))$$, 'le dernier membre supprime l’espace');
+select lives_ok($$select public.delete_team(pg_temp.id('ta'))$$, 'le dernier membre supprime l’espace (propriétaire parti)');
 reset role;
 select is((select count(*) from public.sessions where team_id = pg_temp.id('ta'))::int, 0, 'données de TA supprimées en cascade');
 select is((select (select count(*) from public.teams where id = pg_temp.id('ta'))
@@ -181,6 +184,40 @@ select is((select (select count(*) from public.teams where id = pg_temp.id('ta')
                 + (select count(*) from public.team_invites where team_id = pg_temp.id('ta')))::int,
           0, 'espace, nageurs, membres et invitations de TA supprimés');
 select is((select count(*) from public.teams where id = pg_temp.id('tb'))::int, 1, 'TB intacte');
+
+-- ---------------------------------------------------------------- seul le propriétaire supprime l'espace (12)
+-- Propriétaire = created_by (le créateur, jamais modifiable par un client). Il ne peut être retiré que par
+-- lui-même. Sans propriétaire membre (parti, compte supprimé), tout membre peut supprimer l'espace.
+insert into ids values ('tc', tests.create_team('TC', array[pg_temp.id('a'), pg_temp.id('c'), pg_temp.id('f')]));
+select tests.as_coach(pg_temp.id('c'));
+select throws_ok($$select public.delete_team(pg_temp.id('tc'))$$, 'P0001', 'not_owner', 'invité C : TC non supprimable');
+select tests.as_coach(pg_temp.id('f'));
+select throws_ok($$select public.delete_team(pg_temp.id('tc'))$$, 'P0001', 'not_owner', 'invité F : TC non supprimable');
+select tests.as_coach(pg_temp.id('c'));
+select throws_ok($$select public.remove_team_member(pg_temp.id('tc'), pg_temp.id('a'))$$, 'P0001', 'not_owner', 'invité C : ne retire pas le propriétaire A');
+select lives_ok($$select public.remove_team_member(pg_temp.id('tc'), pg_temp.id('f'))$$, 'un invité retire un autre invité');
+select tests.as_coach(pg_temp.id('a'));
+select is((select count(*) from public.team_members where team_id = pg_temp.id('tc') and coach_id = pg_temp.id('a'))::int, 1, 'A est resté membre de TC');
+select lives_ok($$select public.delete_team(pg_temp.id('tc'))$$, 'le propriétaire A supprime TC, C étant encore membre');
+reset role;
+select is((select (select count(*) from public.teams where id = pg_temp.id('tc'))
+                + (select count(*) from public.team_members where team_id = pg_temp.id('tc')))::int,
+          0, 'TC et ses membres supprimés');
+-- propriétaire parti : plus de garde-fou, l'espace ne reste pas bloqué
+insert into ids values ('td', tests.create_team('TD', array[pg_temp.id('a'), pg_temp.id('c')]));
+select tests.as_coach(pg_temp.id('a'));
+select lives_ok($$select public.remove_team_member(pg_temp.id('td'), pg_temp.id('a'))$$, 'le propriétaire A quitte TD');
+select tests.as_coach(pg_temp.id('c'));
+select lives_ok($$select public.delete_team(pg_temp.id('td'))$$, 'propriétaire parti : C supprime TD');
+reset role;
+select is((select count(*) from public.teams where id = pg_temp.id('td'))::int, 0, 'TD supprimé');
+-- compte du propriétaire supprimé : created_by passe à null
+insert into ids values ('te', tests.create_team('TE', array[pg_temp.id('c'), pg_temp.id('b')]));
+update public.teams set created_by = null where id = pg_temp.id('te');
+select tests.as_coach(pg_temp.id('b'));
+select lives_ok($$select public.delete_team(pg_temp.id('te'))$$, 'sans propriétaire (created_by nul) : B supprime TE');
+reset role;
+select is((select count(*) from public.teams where id = pg_temp.id('te'))::int, 0, 'TE supprimé');
 
 select * from finish();
 rollback;
