@@ -122,6 +122,86 @@ test('(e) ajout par e-mail, invitation, retrait d’un membre par un autre, dern
   await ctxC.close();
 });
 
+test('seul le propriétaire supprime le groupe : l’invité ne voit pas le bouton et ne peut pas retirer le propriétaire', async ({ browser }) => {
+  const ctxA = await browser.newContext();
+  const ctxC = await browser.newContext();
+  const fake = await installFakeSupabase([ctxA, ctxC], {
+    ...seed(),
+    teams: [{ id: TA, name: 'Pôle <i>Formation</i>', owner: 'a@toac.fr' }],
+    members: [{ team_id: TA, email: 'a@toac.fr' }, { team_id: TA, email: 'c@toac.fr' }],
+  });
+  const pageA = await ctxA.newPage();
+  const pageC = await ctxC.newPage();
+  const deleteButton = (page) => page.getByRole('button', { name: 'Supprimer le groupe et toutes ses données' });
+
+  // l'invité C : pas de bouton de suppression, une note, et A ne peut pas être retiré
+  await login(pageC, 'c@toac.fr');
+  await expect(pageC.locator('[data-screen="calendar"]')).toBeVisible();
+  await settings(pageC);
+  await expect(pageC.locator('.member-row', { hasText: 'a@toac.fr' })).toContainText('(propriétaire)');
+  await expect(pageC.getByText('Seul le propriétaire du groupe (a@toac.fr) peut le supprimer.')).toBeVisible();
+  await expect(deleteButton(pageC)).toHaveCount(0);
+  await expect(pageC.locator('.member-row', { hasText: 'a@toac.fr' }).getByRole('button')).toHaveCount(0);
+  await expect(pageC.locator('.member-row', { hasText: 'c@toac.fr' }).getByRole('button', { name: 'Quitter le groupe' })).toBeVisible();
+
+  // le propriétaire A : bouton de suppression, et peut retirer l'invité
+  await login(pageA, 'a@toac.fr');
+  await expect(pageA.locator('[data-screen="calendar"]')).toBeVisible();
+  await settings(pageA);
+  await expect(deleteButton(pageA)).toBeVisible();
+  await expect(pageA.getByText('Seul le propriétaire du groupe')).toHaveCount(0);
+  await expect(pageA.locator('.member-row', { hasText: 'c@toac.fr' }).getByRole('button', { name: 'Retirer' })).toBeVisible();
+
+  expect(fake.state.tables.teams.map((t) => t.id)).toEqual([TA]);
+  await ctxA.close();
+  await ctxC.close();
+});
+
+test('l’écran de l’invité était périmé : suppression refusée avant d’effacer la moindre photo', async ({ browser }) => {
+  const ctxC = await browser.newContext();
+  const fake = await installFakeSupabase(ctxC, {
+    ...seed(),
+    teams: [{ id: TA, name: 'Pôle Formation', owner: 'a@toac.fr' }],
+    members: [{ team_id: TA, email: 'c@toac.fr' }], // A est parti : C voit le bouton
+  });
+  const photo = `${TA}/swimmers/00000001-1111-4111-8111-111111111111.jpg`;
+  fake.state.photos.set(photo, { data: Buffer.from('x'), mime: 'image/jpeg', size: 1 });
+  const pageC = await ctxC.newPage();
+  await login(pageC, 'c@toac.fr');
+  await expect(pageC.locator('[data-screen="calendar"]')).toBeVisible();
+  await settings(pageC);
+  const del = pageC.getByRole('button', { name: 'Supprimer le groupe et toutes ses données' });
+  await expect(del).toBeVisible();
+
+  fake.addMember(TA, 'a@toac.fr'); // A revient dans le groupe pendant que l'écran de C est ouvert
+  await del.click();
+  const dialog = pageC.getByRole('dialog', { name: 'Supprimer le groupe « Pôle Formation » ?' });
+  await dialog.getByLabel('Tape le nom du groupe pour confirmer').fill('Pôle Formation');
+  await dialog.getByRole('button', { name: 'Supprimer le groupe' }).click();
+  await expect(pageC.getByText('Action réservée au propriétaire du groupe')).toBeVisible();
+  expect(fake.state.photos.has(photo)).toBe(true);
+  expect(fake.callsTo('/rest/v1/rpc/delete_team')).toHaveLength(0);
+  expect(fake.state.tables.teams.map((t) => t.id)).toEqual([TA]);
+  await ctxC.close();
+});
+
+test('un groupe sans propriétaire membre : tout membre peut le supprimer', async ({ browser }) => {
+  const ctxC = await browser.newContext();
+  const fake = await installFakeSupabase(ctxC, {
+    ...seed(),
+    teams: [{ id: TA, name: 'Pôle <i>Formation</i>', owner: 'a@toac.fr' }],
+    members: [{ team_id: TA, email: 'c@toac.fr' }], // le propriétaire A est parti
+  });
+  const pageC = await ctxC.newPage();
+  await login(pageC, 'c@toac.fr');
+  await expect(pageC.locator('[data-screen="calendar"]')).toBeVisible();
+  await settings(pageC);
+  await expect(pageC.getByRole('button', { name: 'Supprimer le groupe et toutes ses données' })).toBeVisible();
+  await expect(pageC.getByText('Seul le propriétaire du groupe')).toHaveCount(0);
+  expect(fake.state.tables.teams).toHaveLength(1);
+  await ctxC.close();
+});
+
 test('(f) retiré pendant qu’il est hors ligne avec une op en attente : rien n’est renvoyé, cache effacé, message', async ({ browser }) => {
   const ctxA = await browser.newContext();
   const fake = await installFakeSupabase(ctxA, seed());

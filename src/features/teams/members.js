@@ -1,7 +1,8 @@
 /**
  * Section « Espace » des réglages : nom de l'espace, membres, invitations, nouvel espace, suppression.
  *
- * Tous les membres ont les mêmes droits (renommer, ajouter, retirer n'importe qui, soi compris).
+ * Tous les membres ont les mêmes droits (renommer, ajouter, retirer, soi compris), sauf deux, réservés au
+ * propriétaire (le créateur du groupe, voir owner.js) : supprimer le groupe, et être retiré par un autre.
  * Le dernier membre ne peut pas quitter l'espace : il le supprime. Aucune invitation n'est envoyée
  * par e-mail : l'entraîneur prévient lui-même son collègue.
  */
@@ -15,6 +16,7 @@ import { on } from '../../app/actions.js';
 import { askConfirm } from '../../app/dialog.js';
 import { toast } from '../../app/toast.js';
 import { setCurrentTeamName, switchTeam, leaveClosedTeam, currentTeam } from '../../app/shell.js';
+import { ownerOf, deletionBlocked, ownerMayNotBeRemoved } from './owner.js';
 
 const BUCKET = 'photos';
 /** Taille d'une page de lecture (et d'un lot de suppression) du stockage. */
@@ -32,6 +34,7 @@ export function memberError(error) {
   if (/too_many_invites/.test(m)) return "Trop d'invitations, réessaie dans une heure";
   if (/last_member/.test(m)) return MSG_LAST_MEMBER;
   if (/invalid_name/.test(m)) return "Le nom du groupe doit faire entre 1 et 60 caractères";
+  if (/not_owner/.test(m)) return 'Action réservée au propriétaire du groupe';
   if (/not_allowed/.test(m)) return "Tu n'as pas accès à cette action";
   if (/fetch|network|Failed/i.test(m) || error?.status === 0) return 'Connexion impossible, vérifie ta connexion internet';
   return 'Une erreur est survenue, réessaie';
@@ -51,7 +54,8 @@ async function rpc(name, args) {
 /**
  * Membres et invitations en attente d'un espace.
  * @param {string} teamId
- * @returns {Promise<{members: {id: string, email: string, name: string}[], invites: {email: string}[]}>}
+ * @returns {Promise<{members: {id: string, email: string, name: string}[], invites: {email: string}[], ownerId: string|null}>}
+ *   ownerId : le créateur du groupe (teams.created_by), null si son compte a été supprimé
  * @throws {Error} hors ligne
  */
 export async function loadMembers(teamId) {
@@ -63,12 +67,14 @@ export async function loadMembers(teamId) {
   if (coaches.error) fail();
   const invites = await supabase.from('team_invites').select('email').eq('team_id', teamId).order('email');
   if (invites.error) fail();
+  const team = await supabase.from('teams').select('created_by').eq('id', teamId);
+  if (team.error) fail();
   const byId = new Map(coaches.data.map((c) => [c.id, c]));
   const members = ids.map((id) => {
     const c = byId.get(id);
     return { id, email: c?.email ?? '', name: (c?.display_name ?? '').trim() };
   }).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'fr'));
-  return { members, invites: invites.data.map((i) => ({ email: i.email })) };
+  return { members, invites: invites.data.map((i) => ({ email: i.email })), ownerId: team.data?.[0]?.created_by ?? null };
 }
 
 /**
@@ -164,11 +170,14 @@ export async function deleteTeamPhotos(teamId) {
 
 /**
  * Supprime un espace pour tous ses membres : ses photos d'abord, puis l'espace et ses données.
- * Sans effet sur le serveur si les photos ne peuvent pas être supprimées.
+ * Réservé à son propriétaire (voir owner.js). Sans effet sur le serveur si les photos ne peuvent pas être supprimées.
  * @param {string} teamId
  * @throws {Error} message français
  */
 export async function deleteTeam(teamId) {
+  // Propriétaire relu à l'instant : un invité dont l'écran était périmé n'efface aucune photo avant le refus du serveur.
+  const coach = getCoach();
+  if (coach && deletionBlocked(await loadMembers(teamId), coach.id)) throw new Error(memberError({ message: 'not_owner' }));
   await deleteTeamPhotos(teamId);
   await rpc('delete_team', { team: teamId });
 }
@@ -190,15 +199,36 @@ async function flushBefore(coachId, teamId) {
 /** État de la section, par espace ouvert dans les réglages. */
 const ui = { root: null, team: null, data: null, error: '' };
 
-function memberRowHtml(m, meId) {
+function memberRowHtml(m, meId, data) {
   const self = m.id === meId;
+  const owner = ownerOf(data) === m.id;
+  const tags = [self ? 'toi' : '', owner ? 'propriétaire' : ''].filter(Boolean).join(', ');
+  // le propriétaire ne peut être retiré que par lui-même : pas de bouton « Retirer » pour les autres
+  const button = ownerMayNotBeRemoved(data, m.id, meId)
+    ? ''
+    : html`<button type="button" class="btn-sm btn-danger-ghost" data-action="member-remove" data-id="${m.id}">${self ? "Quitter le groupe" : 'Retirer'}</button>`;
   return html`<li class="member-row" data-id="${m.id}">
     <div class="member-text">
-      <div class="member-name">${m.name || m.email}${self ? raw(' <span class="member-self">(toi)</span>') : ''}</div>
+      <div class="member-name">${m.name || m.email}${tags ? raw(html` <span class="member-self">(${tags})</span>`) : ''}</div>
       ${m.name ? raw(html`<div class="member-email">${m.email}</div>`) : ''}
     </div>
-    <button type="button" class="btn-sm btn-danger-ghost" data-action="member-remove" data-id="${m.id}">${self ? "Quitter le groupe" : 'Retirer'}</button>
+    ${raw(button)}
   </li>`;
+}
+
+/**
+ * Suppression du groupe : le bouton pour le propriétaire (ou si le groupe n'a plus de propriétaire membre),
+ * une note pour les invités. Rien pendant le chargement des membres ; si le chargement échoue, le bouton
+ * reste affiché (le serveur refuse de toute façon à un invité).
+ */
+function dangerHtml() {
+  if (!ui.data && !ui.error) return '';
+  const meId = getCoach()?.id;
+  if (ui.data && deletionBlocked(ui.data, meId)) {
+    const owner = ui.data.members.find((m) => m.id === ownerOf(ui.data));
+    return html`<p class="settings-note settings-gap" role="status">Seul le propriétaire du groupe (${owner?.name || owner?.email || ''}) peut le supprimer.</p>`;
+  }
+  return '<button type="button" class="btn-full btn-danger-ghost settings-gap" data-action="space-delete">Supprimer le groupe et toutes ses données</button>';
 }
 
 function listsHtml() {
@@ -213,7 +243,7 @@ function listsHtml() {
       </li>`))}</ul>`
     : '';
   return html`<h3 class="settings-sub">Membres</h3>
-    <ul class="settings-list">${ui.data.members.map((m) => raw(memberRowHtml(m, meId)))}</ul>
+    <ul class="settings-list">${ui.data.members.map((m) => raw(memberRowHtml(m, meId, ui.data)))}</ul>
     ${raw(invites)}`;
 }
 
@@ -243,7 +273,7 @@ export function spaceSectionHtml(team) {
       <input type="text" class="form-input" id="space-new" maxlength="60" autocomplete="off" placeholder="Nom du nouveau groupe" aria-label="Nom du nouveau groupe">
       <button type="button" class="btn-sm btn-ghost" data-action="space-create">Créer le groupe</button>
     </div>
-    <button type="button" class="btn-full btn-danger-ghost settings-gap" data-action="space-delete">Supprimer le groupe et toutes ses données</button>
+    <div id="space-danger"></div>
   </section>`;
 }
 
@@ -252,6 +282,8 @@ const find = (sel) => ui.root?.querySelector(sel) ?? null;
 function refreshLists() {
   const box = find('#space-lists');
   if (box) box.innerHTML = listsHtml();
+  const danger = find('#space-danger');
+  if (danger) danger.innerHTML = dangerHtml();
 }
 
 function setMsg(text) {
@@ -354,6 +386,10 @@ on('member-remove', async (btn) => {
   const member = ui.data?.members.find((m) => m.id === btn.dataset.id);
   if (!coach || !member) return;
   const self = member.id === coach.id;
+  if (ownerMayNotBeRemoved(ui.data, member.id, coach.id)) {
+    setMsg(memberError({ message: 'not_owner' }));
+    return;
+  }
   const pending = self ? pendingCount(team.id) : 0;
   const ok = await askConfirm(self
     ? {
@@ -406,6 +442,10 @@ on('space-delete', async (btn) => {
   const team = ui.team;
   const coach = getCoach();
   if (!coach) return;
+  if (deletionBlocked(ui.data, coach.id)) {
+    toast(memberError({ message: 'not_owner' }));
+    return;
+  }
   const ok = await askConfirm({
     icon: '🗑',
     title: `Supprimer le groupe « ${team.name} » ?`,
